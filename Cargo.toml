@@ -1,0 +1,9 @@
+[package]
+name = "binal"
+version = "0.0.0"
+authors = ["Prime"]
+edition = "2021"
+publish = false
+
+[dependencies]
+iced-x86 = "1.21.0"
