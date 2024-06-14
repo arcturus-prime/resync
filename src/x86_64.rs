@@ -10,7 +10,7 @@ fn lift_register_offset(block: &mut Block, register: iced_x86::Register) -> () {
         iced_x86::Register::BH => iced_x86::Register::RBX as usize * 512 + 8,
         iced_x86::Register::CH => iced_x86::Register::RCX as usize * 512 + 8,
         iced_x86::Register::DH => iced_x86::Register::RDX as usize * 512 + 8,
-        _ => register.full_register() as usize,
+        _ => register.full_register() as usize * 512,
     };
 
     block.push_data(Data { uint: offset });
@@ -51,20 +51,20 @@ fn lift_flag_get(block: &mut Block, position: usize, value: bool) -> () {
     block.push_code(Code::Load);
 }
 
-fn lift_memory_expression(block: &mut Block, operand: iced_x86::MemoryOperand) -> () {
+fn lift_memory_expression(block: &mut Block, instruction: iced_x86::Instruction) -> () {
     let mut num = 0;
 
-    if operand.base != iced_x86::Register::None {
-        lift_register_get(block, operand.base);
+    if instruction.memory_base() != iced_x86::Register::None {
+        lift_register_get(block, instruction.memory_base());
         num += 1;
     }
 
-    if operand.index != iced_x86::Register::None {
-        lift_register_get(block, operand.index);
+    if instruction.memory_index() != iced_x86::Register::None {
+        lift_register_get(block, instruction.memory_index());
 
-        if operand.scale != 1 {
+        if instruction.memory_index_scale() != 1 {
             block.push_data(Data {
-                uint: operand.scale as usize,
+                uint: instruction.memory_index_scale() as usize,
             });
             block.push_code(Code::Mul);
         }
@@ -72,22 +72,32 @@ fn lift_memory_expression(block: &mut Block, operand: iced_x86::MemoryOperand) -
         num += 1;
     }
 
-    if operand.displacement != 0 {
+    if instruction.memory_displacement64() != 0 {
         block.push_data(Data {
-            int: operand.displacement as isize,
+            int: instruction.memory_displacement64() as isize,
         });
 
         num += 1;
     }
 
-    for i in 0..num {
+    for _ in 0..num {
         block.push_code(Code::Add);
     }
 }
 
-fn lift_memory_get(block: &mut Block, operand: iced_x86::Operand) -> () {
+fn lift_memory_get(block: &mut Block, instruction: iced_x86::Instruction) -> () {
     block.push_data(Data { uint: 1 });
-    lift_memory_expression(block, operand);
+    lift_memory_expression(block, instruction);
 
-    block.push_data(Data { uint:  });
+    block.push_data(Data {
+        uint: instruction.memory_displ_size() as usize * 8,
+    });
+    block.push_code(Code::Load);
+}
+
+fn lift_memory_set(block: &mut Block, instruction: iced_x86::Instruction) -> () {
+    block.push_data(Data { uint: 1 });
+    lift_memory_expression(block, instruction);
+
+    block.push_code(Code::Store);
 }
