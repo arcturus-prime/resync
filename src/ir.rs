@@ -1,6 +1,3 @@
-use std::iter::Rev;
-
-#[derive(Copy, Clone)]
 pub enum Code {
     Data,
     // data, size
@@ -48,7 +45,6 @@ pub enum Code {
     Jump,
 }
 
-#[derive(Copy, Clone)]
 pub union Data {
     pub int: isize,
     pub uint: usize,
