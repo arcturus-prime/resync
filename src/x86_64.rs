@@ -1,51 +1,85 @@
-use iced_x86;
+use iced_x86::{Decoder, DecoderOptions, Instruction as IcedInstruction};
 use std::mem::size_of;
 
 use crate::ir::{Block, Code, Data};
 
-fn lift_register_offset(block: &mut Block, register: iced_x86::Register) -> () {
-    let offset = match register {
-        iced_x86::Register::AH => iced_x86::Register::RAX as usize * 512 + 8,
-        iced_x86::Register::BH => iced_x86::Register::RBX as usize * 512 + 8,
-        iced_x86::Register::CH => iced_x86::Register::RCX as usize * 512 + 8,
-        iced_x86::Register::DH => iced_x86::Register::RDX as usize * 512 + 8,
-        _ => register.full_register() as usize * 512,
-    };
-
-    block.push_data(Data { uint: offset });
-}
-
 fn lift_register_get(block: &mut Block, register: iced_x86::Register) -> () {
-    block.push_data(Data { uint: 0 });
-    lift_register_offset(block, register);
-    block.push_data(Data {
-        uint: register.size(),
-    });
-    block.push_code(Code::Load);
+    block.push(
+        Code::Load,
+        Data {
+            uint: register.full_register() as usize,
+        },
+    );
+
+    if register != register.full_register() {
+        match register {
+            iced_x86::Register::DH
+            | iced_x86::Register::CH
+            | iced_x86::Register::BH
+            | iced_x86::Register::AH => {
+                block.push(Code::Data, Data { uint: 8 });
+            }
+            _ => {
+                block.push(Code::Data, Data { uint: 0 });
+            }
+        };
+        block.push(
+            Code::Data,
+            Data {
+                uint: register.size(),
+            },
+        );
+        block.push_code(Code::Extract);
+    }
 }
 
 fn lift_register_set(block: &mut Block, register: iced_x86::Register) -> () {
-    block.push_data(Data { uint: 0 });
-    lift_register_offset(block, register);
-    block.push_code(Code::Store);
+    block.push(
+        Code::Load,
+        Data {
+            uint: register.full_register() as usize,
+        },
+    );
+    if register != register.full_register() {
+        match register {
+            iced_x86::Register::DH
+            | iced_x86::Register::CH
+            | iced_x86::Register::BH
+            | iced_x86::Register::AH => {
+                block.push(Code::Data, Data { uint: 8 });
+            }
+            _ => {
+                block.push(Code::Data, Data { uint: 0 });
+            }
+        };
+
+        block.push_code(Code::Insert);
+    }
+
+    block.push(
+        Code::Save,
+        Data {
+            uint: register.full_register() as usize,
+        },
+    );
 }
 
 fn lift_flag_set(block: &mut Block, position: usize, value: bool) -> () {
-    block.push_data(Data { boolean: value });
-    block.push_data(Data { uint: 0 });
-    block.push_data(Data {
-        uint: size_of::<iced_x86::Register>() * 2 ^ 8 * 512 + position,
-    });
+    block.push_data(Data::Uint(1 << position));
+    block.push_data(Data::Uint(0));
+
+    // Choose a slot beyond all the other registers because iced_x86 doesn't have a EFLAGS register enum
+    block.push_data(Data::Uint(size_of::<iced_x86::Register>() * 2 ^ 8 * 64));
 
     block.push_code(Code::Store);
 }
 
 fn lift_flag_get(block: &mut Block, position: usize) -> () {
-    block.push_data(Data { uint: 0 });
-    block.push_data(Data {
-        uint: size_of::<iced_x86::Register>() * 2 ^ 8 * 512 + position,
-    });
-    block.push_data(Data { uint: 1 });
+    block.push_data(Data::Uint(0));
+
+    //See comment in lift_flag_set
+    block.push_data(Data::Uint(size_of::<iced_x86::Register>() * 2 ^ 8 * 64));
+    block.push_data(Data::Uint(1));
 
     block.push_code(Code::Load);
 }
@@ -62,19 +96,15 @@ fn lift_memory_expression(block: &mut Block, instruction: iced_x86::Instruction)
         lift_register_get(block, instruction.memory_index());
 
         if instruction.memory_index_scale() != 1 {
-            block.push_data(Data {
-                uint: instruction.memory_index_scale() as usize,
-            });
-            block.push_code(Code::Mul);
+            block.push_data(Data::Uint(instruction.memory_index_scale() as usize));
+            block.push(Code::Mul, Data { none: () });
         }
 
         num += 1;
     }
 
     if instruction.memory_displacement64() != 0 {
-        block.push_data(Data {
-            int: instruction.memory_displacement64() as isize,
-        });
+        block.push_data(Data::Int(instruction.memory_displacement64() as isize));
 
         num += 1;
     }
@@ -84,18 +114,30 @@ fn lift_memory_expression(block: &mut Block, instruction: iced_x86::Instruction)
     }
 }
 
-fn lift_memory_get(block: &mut Block, instruction: iced_x86::Instruction) -> () {
-    block.push_data(Data { uint: 1 });
-    lift_memory_expression(block, instruction);
+fn lift_memory_get(block: &mut Block, instruction: iced_x86::IcedInstruction) -> () {
+    use iced_x86::MemorySize::*;
 
-    block.push_data(Data {
-        uint: instruction.memory_displ_size() as usize * 8,
-    });
+    block.push_data(Data::Uint(1));
+    lift_memory_expression(block, instruction);
+    block.push_data(Data::Uint(match instruction.memory_size() {
+        UInt8 | Int8 => 1,
+        UInt16 | Int16 | WordOffset => 2,
+        UInt32 | Int32 | DwordOffset | SegPtr16 => 4,
+        UInt52 => 7,
+        UInt64 | Int64 | QwordOffset => 8,
+        UInt128 | Int128 => 16,
+        UInt256 | Int256 => 32,
+        UInt512 | Int512 => 64,
+        SegPtr32 => 6,
+        SegPtr64 => 10,
+        _ => todo!(),
+    }));
+
     block.push_code(Code::Load);
 }
 
-fn lift_memory_set(block: &mut Block, instruction: iced_x86::Instruction) -> () {
-    block.push_data(Data { uint: 1 });
+fn lift_memory_set(block: &mut Block, instruction: iced_x86::IcedInstruction) -> () {
+    block.push_data(Data::Uint(1));
     lift_memory_expression(block, instruction);
 
     block.push_code(Code::Store);
@@ -107,26 +149,24 @@ fn lift_immediate_get(
     operand: u32,
     size: usize,
 ) -> () {
-    block.push_data(Data {
-        uint: instruction.immediate(operand) as usize,
-    });
-    block.push_data(Data { uint: size });
+    block.push_data(Data::Uint(instruction.immediate(operand) as usize));
+    block.push_data(Data::Uint(size));
     block.push_code(Code::Resize);
 }
 
-fn lift_operand_get(block: &mut Block, instruction: iced_x86::Instruction, operand: u32) -> () {
+fn lift_operand_get(block: &mut Block, instruction: iced_x86::IcedInstruction, operand: u32) -> () {
     match instruction.op_kind(operand) {
         iced_x86::OpKind::NearBranch64
         | iced_x86::OpKind::NearBranch32
-        | iced_x86::OpKind::NearBranch16 => block.push_data(Data {
-            uint: instruction.near_branch_target() as usize,
-        }),
-        iced_x86::OpKind::FarBranch16 => block.push_data(Data {
-            uint: instruction.far_branch16() as usize,
-        }),
-        iced_x86::OpKind::FarBranch32 => block.push_data(Data {
-            uint: instruction.far_branch32() as usize,
-        }),
+        | iced_x86::OpKind::NearBranch16 => {
+            block.push_data(Data::Uint(instruction.near_branch_target() as usize))
+        }
+        iced_x86::OpKind::FarBranch16 => {
+            block.push_data(Data::Uint(instruction.far_branch16() as usize))
+        }
+        iced_x86::OpKind::FarBranch32 => {
+            block.push_data(Data::Uint(instruction.far_branch32() as usize))
+        }
         iced_x86::OpKind::Immediate8_2nd | iced_x86::OpKind::Immediate8 => {
             lift_immediate_get(block, instruction, operand, 8)
         }
@@ -139,9 +179,7 @@ fn lift_operand_get(block: &mut Block, instruction: iced_x86::Instruction, opera
         iced_x86::OpKind::Immediate8to64
         | iced_x86::OpKind::Immediate32to64
         | iced_x86::OpKind::Immediate64 => {
-            block.push_data(Data {
-                uint: instruction.immediate(operand) as usize,
-            });
+            block.push_data(Data::Uint(instruction.immediate(operand) as usize));
         }
         iced_x86::OpKind::Register => lift_register_get(block, instruction.op_register(operand)),
         iced_x86::OpKind::MemorySegSI => todo!(),
@@ -157,7 +195,7 @@ fn lift_operand_get(block: &mut Block, instruction: iced_x86::Instruction, opera
     }
 }
 
-fn lift_operand_set(block: &mut Block, instruction: iced_x86::Instruction, operand: u32) -> () {
+fn lift_operand_set(block: &mut Block, instruction: iced_x86::IcedInstruction, operand: u32) -> () {
     match instruction.op_kind(operand) {
         iced_x86::OpKind::NearBranch16
         | iced_x86::OpKind::NearBranch32
@@ -187,4 +225,25 @@ fn lift_operand_set(block: &mut Block, instruction: iced_x86::Instruction, opera
     }
 }
 
-fn lift(block: &mut Block, code: &[u8]) -> () {}
+pub fn lift(block: &mut Block, code: &[u8]) -> () {
+    let mut decoder = Decoder::with_ip(64, code, 0, DecoderOptions::NONE);
+    let mut instruction = IcedInstruction::default();
+
+    while decoder.can_decode() {
+        decoder.decode_out(&mut instruction);
+
+        match instruction.mnemonic() {
+            iced_x86::Mnemonic::Mov => {
+                lift_operand_get(block, instruction, 1);
+                lift_operand_set(block, instruction, 0);
+            }
+            iced_x86::Mnemonic::Add => {
+                lift_operand_get(block, instruction, 1);
+                lift_operand_get(block, instruction, 0);
+                block.push_code(Code::Add);
+                lift_operand_set(block, instruction, 0);
+            }
+            _ => {}
+        }
+    }
+}
