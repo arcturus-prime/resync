@@ -6,13 +6,9 @@ pub enum Code {
     Load,
     Save,
 
-    Swap,
-    Copy,
-
     // data, offset (bits), size (bits)
     Extract,
-
-    // data, patch, offset (bits)
+    // patch, data, offset (bits)
     Insert,
 
     Xor,
@@ -58,6 +54,12 @@ pub union Data {
     pub uint: usize,
     pub double: f64,
     pub float: f32,
+}
+
+impl Default for Data {
+    fn default() -> Self {
+        Self { none: () }
+    }
 }
 
 pub struct Block {

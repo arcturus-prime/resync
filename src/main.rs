@@ -18,6 +18,6 @@ pub fn main() -> () {
     lift(&mut block, &CODE);
 
     for (c, d) in block.iter() {
-        println!("{:?} {:?}", c, d);
+        println!("{:?} {:?}", c, unsafe { d.uint });
     }
 }
