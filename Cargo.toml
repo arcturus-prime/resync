@@ -1,9 +1,10 @@
 [package]
 name = "binal"
-version = "0.0.0"
+version = "0.0.1"
 authors = ["Prime"]
 edition = "2021"
 publish = false
 
 [dependencies]
 iced-x86 = "1.21.0"
+num_enum = "0.7.2"
