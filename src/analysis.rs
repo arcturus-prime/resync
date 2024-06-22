@@ -1,20 +1,15 @@
-use std::collections::HashMap;
-
-use crate::{
-    buffer::{add, and, collect_isize, collect_usize, mul, neg, not, or, shift, sub, xor},
-    ir::Code,
-};
+use crate::ir::Code;
 
 pub struct State {
-    pub stack: Vec<Vec<u8>>,
-    pub files: HashMap<u8, Vec<u8>>,
+    pub stack: Vec<u128>,
+    pub memory: Vec<u8>,
 }
 
 impl State {
     pub fn new() -> State {
         State {
             stack: Vec::new(),
-            files: HashMap::new(),
+            memory: Vec::new(),
         }
     }
 }
@@ -23,107 +18,423 @@ fn step(code: &mut &[u8], state: &mut State) {
     let op = code[0];
 
     match Code::try_from(op) {
+        Ok(Code::Nop) => {}
         Ok(Code::Data) => {
-            state.stack.push(code[2..2 + code[1] as usize].to_vec());
-            *code = &code[2 + code[1] as usize..];
-        }
-        Ok(Code::Load) => {
-            let a = collect_usize(&state.stack.pop().unwrap());
-            let b = collect_usize(&state.stack.pop().unwrap());
+            let size = code[1] as usize;
+            let mut num = 0 as u128;
 
-            if let Some(file) = &state.files.get(&code[1]) {
-                state.stack.push(file[a..b].to_vec());
-            } else {
-                state.stack.push(Vec::new());
-            }
-            *code = &code[2..];
-        }
-        Ok(Code::Save) => {
-            let a = collect_usize(&state.stack.pop().unwrap());
-            let b = state.stack.pop().unwrap();
-
-            if !state.files.contains_key(&code[1]) {
-                state.files.insert(code[1], Vec::new());
-                state
-                    .files
-                    .get_mut(&code[1])
-                    .unwrap()
-                    .resize(a + b.len(), 0);
+            for i in 0..size {
+                num += (code[2 + i] as u128) << i * 8;
             }
 
-            state.files.get_mut(&code[1]).unwrap()[a..a + b.len()].copy_from_slice(&b[..]);
-            *code = &code[2..];
+            state.stack.push(num);
+
+            *code = &code[2 + size..]
+        }
+        Ok(Code::Load8) => {
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.stack.push(state.memory[offset] as u128);
+
+            *code = &code[1..];
+        }
+        Ok(Code::Load16) => {
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.stack.push(u16::from_ne_bytes(
+                state.memory[offset..offset + 2].try_into().unwrap(),
+            ) as u128);
+
+            *code = &code[1..];
+        }
+        Ok(Code::Load32) => {
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.stack.push(u32::from_ne_bytes(
+                state.memory[offset..offset + 4].try_into().unwrap(),
+            ) as u128);
+
+            *code = &code[1..];
+        }
+        Ok(Code::Load64) => {
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.stack.push(u64::from_ne_bytes(
+                state.memory[offset..offset + 8].try_into().unwrap(),
+            ) as u128);
+
+            *code = &code[1..];
+        }
+        Ok(Code::Save8) => {
+            let data = state.stack.pop().unwrap();
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.memory.resize(offset + 1, 0);
+
+            state.memory[offset] = data as u8;
+            *code = &code[1..];
+        }
+        Ok(Code::Save16) => {
+            let data = state.stack.pop().unwrap();
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.memory.resize(offset + 2, 0);
+
+            state.memory[offset..offset + 2].copy_from_slice(&data.to_ne_bytes()[0..2]);
+            *code = &code[1..];
+        }
+        Ok(Code::Save32) => {
+            let data = state.stack.pop().unwrap();
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.memory.resize(offset + 4, 0);
+
+            state.memory[offset..offset + 4].copy_from_slice(&data.to_ne_bytes()[0..4]);
+            *code = &code[1..];
+        }
+        Ok(Code::Save64) => {
+            let data = state.stack.pop().unwrap();
+            let offset = state.stack.pop().unwrap() as usize;
+
+            state.memory.resize(offset + 8, 0);
+
+            state.memory[offset..offset + 8].copy_from_slice(&data.to_ne_bytes()[0..8]);
+            *code = &code[1..];
         }
         Ok(Code::Xor) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            xor(state.stack.last_mut().unwrap(), &a);
+            state.stack.push(a ^ b);
             *code = &code[1..];
         }
         Ok(Code::Or) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            or(state.stack.last_mut().unwrap(), &a);
+            state.stack.push(a | b);
             *code = &code[1..];
         }
         Ok(Code::And) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            and(state.stack.last_mut().unwrap(), &a);
+            state.stack.push(a & b);
             *code = &code[1..];
         }
         Ok(Code::Not) => {
-            not(state.stack.last_mut().unwrap());
+            let a = state.stack.pop().unwrap();
+
+            state.stack.push(!a);
             *code = &code[1..];
         }
         Ok(Code::Shift) => {
-            let a = collect_isize(&state.stack.pop().unwrap());
+            let a = &state.stack.pop().unwrap();
+            let b = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
 
-            shift(state.stack.last_mut().unwrap(), a);
+            if b > 0 {
+                state.stack.push(a << (b as usize));
+            } else {
+                state.stack.push(a >> (b as usize));
+            }
+
+            *code = &code[1..];
+        }
+        Ok(Code::IShift) => {
+            let a = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+            let b = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+
+            if b > 0 {
+                state
+                    .stack
+                    .push(u128::from_ne_bytes((a << (b as usize)).to_ne_bytes()));
+            } else {
+                state
+                    .stack
+                    .push(u128::from_ne_bytes((a >> (b as usize)).to_ne_bytes()));
+            }
+
             *code = &code[1..];
         }
         Ok(Code::Add) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            add(state.stack.last_mut().unwrap(), &a);
+            state.stack.push(a + b);
             *code = &code[1..];
         }
         Ok(Code::Sub) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            sub(state.stack.last_mut().unwrap(), &a);
+            state.stack.push(a - b);
             *code = &code[1..];
         }
         Ok(Code::Mul) => {
-            let mut a = state.stack.pop().unwrap();
-            let mut b = state.stack.pop().unwrap();
+            let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
 
-            state.stack.push(mul(&mut b, &mut a));
+            state.stack.push(a * b);
             *code = &code[1..];
         }
         Ok(Code::Div) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push(a / b);
+            *code = &code[1..];
+        }
+        Ok(Code::IMul) => {
+            let a = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+            let b = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+
+            state.stack.push(u128::from_ne_bytes((a * b).to_ne_bytes()));
+            *code = &code[1..];
+        }
+        Ok(Code::IDiv) => {
+            let a = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+            let b = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+
+            state.stack.push(u128::from_ne_bytes((a / b).to_ne_bytes()));
             *code = &code[1..];
         }
         Ok(Code::Mod) => {
             let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push(a % b);
             *code = &code[1..];
         }
         Ok(Code::Neg) => {
-            neg(state.stack.last_mut().unwrap());
+            let a = i128::from_ne_bytes(state.stack.pop().unwrap().to_ne_bytes());
+
+            state.stack.push(u128::from_ne_bytes((-a).to_ne_bytes()));
             *code = &code[1..];
         }
-        Ok(Code::Lt) => todo!(),
-        Ok(Code::Lte) => todo!(),
-        Ok(Code::Gt) => todo!(),
-        Ok(Code::Gte) => todo!(),
+        Ok(Code::FAdd) => {
+            let a = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u32::from_ne_bytes((a + b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::FSub) => {
+            let a = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u32::from_ne_bytes((a - b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::FMul) => {
+            let a = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u32::from_ne_bytes((a * b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::FDiv) => {
+            let a = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u32::from_ne_bytes((a / b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::FNeg) => {
+            let a = f32::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..4]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u32::from_ne_bytes((-a).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+
+        Ok(Code::DAdd) => {
+            let a = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u64::from_ne_bytes((a + b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::DSub) => {
+            let a = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u64::from_ne_bytes((a - b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::DMul) => {
+            let a = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u64::from_ne_bytes((a * b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::DDiv) => {
+            let a = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+            let b = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u64::from_ne_bytes((a / b).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::DNeg) => {
+            let a = f64::from_ne_bytes(
+                state.stack.pop().unwrap().to_ne_bytes()[0..8]
+                    .try_into()
+                    .unwrap(),
+            );
+
+            state
+                .stack
+                .push(u64::from_ne_bytes((-a).to_ne_bytes()) as u128);
+            *code = &code[1..];
+        }
+
+        Ok(Code::Lt) => {
+            let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push((a < b) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::Lte) => {
+            let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push((a <= b) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::Gt) => {
+            let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push((a > b) as u128);
+            *code = &code[1..];
+        }
+        Ok(Code::Gte) => {
+            let a = state.stack.pop().unwrap();
+            let b = state.stack.pop().unwrap();
+
+            state.stack.push((a >= b) as u128);
+            *code = &code[1..];
+        }
+
+        Ok(Code::FLt) => {
+            // let a = f32::from_ne_bytes(
+            //     state.stack.pop().unwrap().to_ne_bytes()[0..8]
+            //         .try_into()
+            //         .unwrap(),
+            // );
+            // let b = f32::from_ne_bytes(
+            //     state.stack.pop().unwrap().to_ne_bytes()[0..8]
+            //         .try_into()
+            //         .unwrap(),
+            // );
+
+            // state
+            //     .stack
+            //     .push(u64::from_ne_bytes((a / b).to_ne_bytes()) as u128);
+            // *code = &code[1..];
+        }
+        Ok(Code::FLte) => todo!(),
+        Ok(Code::FGt) => todo!(),
+        Ok(Code::FGte) => todo!(),
+
+        Ok(Code::DLt) => todo!(),
+        Ok(Code::DLte) => todo!(),
+        Ok(Code::DGt) => todo!(),
+        Ok(Code::DGte) => todo!(),
+
         Ok(Code::Eql) => todo!(),
+
         Ok(Code::Return) => todo!(),
-        Ok(Code::VCall) => todo!(),
-        Ok(Code::VJump) => todo!(),
+
         Ok(Code::Call) => todo!(),
         Ok(Code::Jump) => todo!(),
-        Ok(Code::Nop) => {}
+
         Err(_) => panic!("Not an opcode!"),
     }
 }
