@@ -6,5 +6,5 @@ edition = "2021"
 publish = false
 
 [dependencies]
-integer-encoding = "4.0.0"
-num_enum = "0.7.2"
+soa_derive = "0.13.0"
+wasmparser = "0.211.1"
