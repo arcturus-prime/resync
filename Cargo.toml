@@ -6,5 +6,5 @@ edition = "2021"
 publish = false
 
 [dependencies]
-soa_derive = "0.13.0"
+iced-x86 = "1.21.0"
 wasmparser = "0.211.1"

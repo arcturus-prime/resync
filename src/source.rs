@@ -5,7 +5,7 @@ pub type Size = u8;
 pub enum Node {
     Nop,
 
-    Const(ConstRef),
+    Const(ConstRef, Size),
 
     Copy(NodeRef),
 
@@ -48,21 +48,14 @@ pub enum Node {
     Call(NodeRef),
 }
 
-pub enum Constant {
-    Uint(usize),
-    Int(isize),
-    Float(f32),
-    Double(f64),
-}
-
-pub struct Function {
+pub struct Block {
     pub name: String,
 
     pub nodes: Vec<Node>,
-    pub constants: Vec<Constant>,
+    pub constants: Vec<[u8; 8]>,
 }
 
-impl Function {
+impl Block {
     pub fn new() -> Self {
         Self {
             name: String::new(),
