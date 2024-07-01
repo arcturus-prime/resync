@@ -1,33 +1,18 @@
-use crate::source::{Block, Node, NodeRef};
+use crate::ir::{Block, Node, NodeRef};
+use crate::lifter::Lifter;
+
 use iced_x86::{Decoder, Instruction};
 
-pub struct Lifter<'a> {
-    block: &'a mut Block,
+pub struct X86_64Lifter {
+    block: Block,
     reg_state: [Option<u8>; 255],
-    reg_order: [Option<u8>; 255],
 }
 
-impl<'a> Lifter<'a> {
-    pub fn new(block: &'a mut Block) -> Self {
-        Lifter { block, reg_state: [None; 255], reg_order: [None; 255] }
-    }
-
+impl X86_64Lifter {
     fn lift_operand(&mut self, inst: Instruction, operand: u32) -> NodeRef {
         match inst.op_kind(operand) {
-            iced_x86::OpKind::Register => {
-                let state = self.reg_state[inst.op_register(operand) as usize];
-                let order = self.reg_order[inst.op_register(operand) as usize];
-
-                if state.is_none() && order.is_some() {
-                    return order.unwrap()
-                }
-
-                if state.is_some() {
-                    return state.unwrap()
-                }
-
-                panic!("Register used in block without a previous load or calling order defined!");
-            },
+            iced_x86::OpKind::Register => self.reg_state[inst.op_register(operand) as usize]
+                .expect("Register used with no previous load or calling order defined!"),
             iced_x86::OpKind::NearBranch16 => todo!(),
             iced_x86::OpKind::NearBranch32 => todo!(),
             iced_x86::OpKind::NearBranch64 => todo!(),
@@ -55,6 +40,12 @@ impl<'a> Lifter<'a> {
         }
     }
 
-    fn lift_mov(&mut self, inst: Instruction) {
+    fn lift_mov(&mut self, inst: Instruction) {}
+}
+
+
+impl Lifter<&[u8]> for X86_64Lifter {
+    fn lift(code: &[u8]) -> Block {
+        todo!()
     }
 }
