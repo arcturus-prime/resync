@@ -1,6 +1,7 @@
 pub mod error;
 pub mod project;
 pub mod server;
+mod notify_event_unwrapper;
 
 use std::{
     fs::create_dir_all,
@@ -37,9 +38,6 @@ fn main() {
 
     loop {
         let (stream, _addr) = listener.accept().unwrap();
-
-            println!("NEW CONNECTION");
-
         let project = Project::open(path.to_path_buf()).unwrap();
         let server = Server::open(project, stream).unwrap();
 
