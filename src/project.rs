@@ -7,17 +7,7 @@ use std::time::Duration;
 use notify::{Config, PollWatcher, RecursiveMode, Watcher};
 use path_absolutize::*;
 
-#[derive(Debug)]
-pub enum Error {
-    InvalidPath,
-    FileOpen,
-    FileRead,
-    FileWrite,
-    FileDelete,
-    WatcherCreation,
-    Serialization,
-    Deserialization,
-}
+use crate::error::*;
 
 pub struct Project {
     pub directory: PathBuf,

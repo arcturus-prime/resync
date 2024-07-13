@@ -1,3 +1,4 @@
+pub mod error;
 pub mod project;
 
 use std::{
@@ -12,6 +13,7 @@ use clap::{Arg, Command};
 use serde::{Deserialize, Serialize};
 
 use project::*;
+use error::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
@@ -47,18 +49,22 @@ impl ProjectServer {
                 let project = Project::open(read_directory).unwrap();
                 let (rx, _watcher) = project.create_watch().unwrap();
 
-                Self::handle_changes(project, write_stream, rx);
+                if Self::handle_changes(project, write_stream, rx).is_err() {
+                    println!("Handling changes failed!");
+                };
             });
 
             std::thread::spawn(move || {
                 let project = Project::open(write_directory).unwrap();
 
-                Self::handle_messages(project, read_stream);
+                if Self::handle_messages(project, read_stream).is_err() {
+                    println!("Handling messages failed!")
+                };
             });
         }
     }
 
-    fn handle_messages(project: Project, stream: TcpStream) {
+    fn handle_messages(project: Project, stream: TcpStream) -> Result<(), Error> {
         let mut data = vec![0; 512 * 64];
         let mut stream = BufReader::new(stream);
 
@@ -70,16 +76,18 @@ impl ProjectServer {
                 continue;
             }
 
-            let message: Message = serde_json::from_slice(&data).unwrap();
+            let Ok(message): Result<Message, _> = serde_json::from_slice(&data) else {
+                return Err(Error::Deserialization);
+            };
 
             match message {
                 Message::Push { path, object } => {
                     let path = project.directory.join(&path);
-                    project.write(&path, object).unwrap();
+                    project.write(&path, object)?;
                 }
                 Message::Delete { path } => {
                     let path = project.directory.join(&path);
-                    project.delete(&path).unwrap();
+                    project.delete(&path)?;
                 }
             }
         }
@@ -89,7 +97,7 @@ impl ProjectServer {
         project: Project,
         stream: TcpStream,
         rx: Receiver<notify::Result<notify::Event>>,
-    ) {
+    ) -> Result<(), Error> {
         for change in rx {
             if change.is_err() {
                 continue;
@@ -106,22 +114,30 @@ impl ProjectServer {
                     .unwrap();
 
                 if is_remove {
-                    serde_json::to_writer(write_stream, &Message::Delete { path: path_str })
-                        .unwrap();
+                    if serde_json::to_writer(write_stream, &Message::Delete { path: path_str })
+                        .is_err()
+                    {
+                        return Err(Error::Serialization);
+                    }
                 } else {
-                    let object = project.read(&path).unwrap();
+                    let object = project.read(&path)?;
 
-                    serde_json::to_writer(
+                    if serde_json::to_writer(
                         write_stream,
                         &Message::Push {
                             path: path_str,
                             object,
                         },
                     )
-                    .unwrap();
+                    .is_err()
+                    {
+                        return Err(Error::Serialization);
+                    }
                 }
             }
         }
+
+        Ok(())
     }
 }
 
