@@ -1,11 +1,10 @@
-pub mod ir;
 pub mod project;
 
 use std::{
     fs::create_dir_all,
     io::{BufRead, BufReader, BufWriter},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
-    path::{self, Path, PathBuf},
+    path::{self, PathBuf},
     sync::mpsc::Receiver,
 };
 
@@ -100,15 +99,26 @@ impl ProjectServer {
 
             for path in change.unwrap().paths {
                 let write_stream = BufWriter::new(&stream);
-                let path_str = path.strip_prefix(&project.directory).unwrap().to_str().unwrap();
+                let path_str = path
+                    .strip_prefix(&project.directory)
+                    .unwrap()
+                    .to_str()
+                    .unwrap();
 
                 if is_remove {
-                    serde_json::to_writer(write_stream, &Message::Delete { path: path_str }).unwrap();
+                    serde_json::to_writer(write_stream, &Message::Delete { path: path_str })
+                        .unwrap();
                 } else {
                     let object = project.read(&path).unwrap();
 
-                    serde_json::to_writer(write_stream, &Message::Push { path: path_str, object })
-                        .unwrap();
+                    serde_json::to_writer(
+                        write_stream,
+                        &Message::Push {
+                            path: path_str,
+                            object,
+                        },
+                    )
+                    .unwrap();
                 }
             }
         }

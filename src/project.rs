@@ -26,16 +26,21 @@ pub struct Project {
 impl Project {
     pub fn open(path: PathBuf) -> Result<Self, Error> {
         if !path.exists() {
-            return Err(Error::FileOpen)
+            return Err(Error::FileOpen);
         }
 
         Ok(Self { directory: path })
     }
 
-    pub fn create_watch(&self) -> Result<(Receiver<notify::Result<notify::Event>>, PollWatcher), Error> {
+    pub fn create_watch(
+        &self,
+    ) -> Result<(Receiver<notify::Result<notify::Event>>, PollWatcher), Error> {
         let (tx, rx) = std::sync::mpsc::channel();
 
-        let Ok(mut watcher) = PollWatcher::new(tx, Config::default().with_poll_interval(Duration::from_secs(2))) else {
+        let Ok(mut watcher) = PollWatcher::new(
+            tx,
+            Config::default().with_poll_interval(Duration::from_secs(30)),
+        ) else {
             return Err(Error::WatcherCreation);
         };
 
@@ -51,11 +56,11 @@ impl Project {
 
     pub fn validate_path(&self, path: &Path) -> Result<PathBuf, Error> {
         let Ok(path) = path.absolutize() else {
-            return Err(Error::InvalidPath)
+            return Err(Error::InvalidPath);
         };
 
         if path.strip_prefix(&self.directory).is_err() {
-            return Err(Error::InvalidPath)
+            return Err(Error::InvalidPath);
         }
 
         Ok(path.to_path_buf())
@@ -106,7 +111,7 @@ impl Project {
         self.validate_path(path)?;
 
         if remove_file(path).is_err() {
-            return Err(Error::FileDelete)
+            return Err(Error::FileDelete);
         }
 
         Ok(())
