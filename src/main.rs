@@ -13,7 +13,6 @@ use clap::{Arg, Command};
 use serde::{Deserialize, Serialize};
 
 use project::*;
-use error::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "action")]
@@ -27,117 +26,112 @@ pub enum Message<'a> {
     },
 }
 
-pub struct ProjectServer {
-    pub username: String,
-    pub directory: PathBuf,
+// TODO(AP): This is good, it doesn't panic. However, we do need to provide some heads-up when any of these checks fail
+fn handle_messages(project: Project, stream: TcpStream) {
+    let mut data = vec![0; 512 * 64];
+    let mut stream = BufReader::new(stream);
+
+    loop {
+        data.clear();
+
+        let Ok(bytes) = stream.read_until(b'\n', &mut data) else {
+            continue;
+        };
+
+        if bytes == 0 {
+            continue;
+        }
+
+        let Ok(message): Result<Message, _> = serde_json::from_slice(&data) else {
+            continue;
+        };
+
+        match message {
+            Message::Push { path, object } => {
+                let path = project.directory.join(&path);
+                if project.write(&path, object).is_err() {
+                    continue;
+                };
+            }
+            Message::Delete { path } => {
+                let path = project.directory.join(&path);
+                if project.delete(&path).is_err() {
+                    continue;
+                };
+            }
+        }
+    }
 }
 
-impl ProjectServer {
-    pub fn start(&self, port: u16, address: IpAddr) {
-        let listener = TcpListener::bind(SocketAddr::new(address, port)).unwrap();
-
-        loop {
-            let stream = listener.accept().unwrap().0;
-
-            let write_stream = stream.try_clone().unwrap();
-            let read_stream = stream.try_clone().unwrap();
-
-            let write_directory = self.directory.clone();
-            let read_directory = self.directory.clone();
-
-            std::thread::spawn(move || {
-                let project = Project::open(read_directory).unwrap();
-                let (rx, _watcher) = project.create_watch().unwrap();
-
-                if Self::handle_changes(project, write_stream, rx).is_err() {
-                    println!("Handling changes failed!");
-                };
-            });
-
-            std::thread::spawn(move || {
-                let project = Project::open(write_directory).unwrap();
-
-                if Self::handle_messages(project, read_stream).is_err() {
-                    println!("Handling messages failed!")
-                };
-            });
+// TODO(AP): This sucks. What am I even looking at?
+fn handle_changes(
+    project: Project,
+    stream: TcpStream,
+    rx: Receiver<notify::Result<notify::Event>>,
+) {
+    for change in rx {
+        if change.is_err() {
+            continue;
         }
-    }
 
-    fn handle_messages(project: Project, stream: TcpStream) -> Result<(), Error> {
-        let mut data = vec![0; 512 * 64];
-        let mut stream = BufReader::new(stream);
+        let is_remove = change.as_ref().unwrap().kind.is_remove();
 
-        loop {
-            data.clear();
+        for path in change.unwrap().paths {
+            let write_stream = BufWriter::new(&stream);
+            let path_str = path
+                .strip_prefix(&project.directory)
+                .unwrap()
+                .to_str()
+                .unwrap();
 
-            let bytes = stream.read_until(b'\n', &mut data).unwrap();
-            if bytes == 0 {
-                continue;
-            }
-
-            let Ok(message): Result<Message, _> = serde_json::from_slice(&data) else {
-                return Err(Error::Deserialization);
-            };
-
-            match message {
-                Message::Push { path, object } => {
-                    let path = project.directory.join(&path);
-                    project.write(&path, object)?;
+            if is_remove {
+                if serde_json::to_writer(write_stream, &Message::Delete { path: path_str }).is_err()
+                {
+                    continue;
                 }
-                Message::Delete { path } => {
-                    let path = project.directory.join(&path);
-                    project.delete(&path)?;
+            } else {
+                let Ok(object) = project.read(&path) else {
+                    continue;
+                };
+
+                if serde_json::to_writer(
+                    write_stream,
+                    &Message::Push {
+                        path: path_str,
+                        object,
+                    },
+                )
+                .is_err()
+                {
+                    continue;
                 }
             }
         }
     }
+}
 
-    fn handle_changes(
-        project: Project,
-        stream: TcpStream,
-        rx: Receiver<notify::Result<notify::Event>>,
-    ) -> Result<(), Error> {
-        for change in rx {
-            if change.is_err() {
-                continue;
-            }
+pub fn start(directory: PathBuf, port: u16, address: IpAddr) {
+    let listener = TcpListener::bind(SocketAddr::new(address, port)).unwrap();
 
-            let is_remove = change.as_ref().unwrap().kind.is_remove();
+    loop {
+        let stream = listener.accept().unwrap().0;
+        let stream_clone = stream.try_clone().unwrap();
 
-            for path in change.unwrap().paths {
-                let write_stream = BufWriter::new(&stream);
-                let path_str = path
-                    .strip_prefix(&project.directory)
-                    .unwrap()
-                    .to_str()
-                    .unwrap();
+        let write_directory = directory.clone();
+        let read_directory = directory.clone();
 
-                if is_remove {
-                    if serde_json::to_writer(write_stream, &Message::Delete { path: path_str })
-                        .is_err()
-                    {
-                        return Err(Error::Serialization);
-                    }
-                } else {
-                    let object = project.read(&path)?;
+        std::thread::spawn(move || {
+            let project = Project::open(&read_directory).unwrap();
+            let (rx, _watcher) = project.create_watch().unwrap();
 
-                    if serde_json::to_writer(
-                        write_stream,
-                        &Message::Push {
-                            path: path_str,
-                            object,
-                        },
-                    )
-                    .is_err()
-                    {
-                        return Err(Error::Serialization);
-                    }
-                }
-            }
-        }
+            handle_changes(project, stream, rx)
+        });
 
-        Ok(())
+        std::thread::spawn(move || {
+            let project = Project::open(&write_directory).unwrap();
+
+            handle_messages(project, stream_clone)
+        });
     }
 }
 
@@ -146,12 +140,10 @@ fn main() {
         .version("1.0")
         .about("External client for managing Binal repository.")
         .arg(Arg::new("project").required(true))
-        .arg(Arg::new("username").required(true))
         .arg(Arg::new("port").long("port").required(false))
         .get_matches();
 
     let project_name = matches.get_one::<String>("project").unwrap();
-    let username = matches.get_one::<String>("username").unwrap();
 
     let path = path::Path::new(project_name);
 
@@ -159,13 +151,8 @@ fn main() {
         create_dir_all(path).unwrap();
     }
 
-    let server = ProjectServer {
-        username: username.clone(),
-        directory: path.canonicalize().unwrap().to_path_buf(),
-    };
-
     let port = matches.get_one::<u16>("port").unwrap_or(&12007);
     let address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
-    server.start(*port, address);
+    start(path.to_path_buf(), *port, address);
 }

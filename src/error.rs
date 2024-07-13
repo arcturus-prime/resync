@@ -6,6 +6,8 @@ pub enum Error {
     FileWrite,
     FileDelete,
     WatcherCreation,
+    WatcherPoll,
     Serialization,
     Deserialization,
+    ConnectionFailure,
 }

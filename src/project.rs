@@ -14,12 +14,12 @@ pub struct Project {
 }
 
 impl Project {
-    pub fn open(path: PathBuf) -> Result<Self, Error> {
+    pub fn open(path: &Path) -> Result<Self, Error> {
         if !path.exists() {
             return Err(Error::FileOpen);
         }
 
-        Ok(Self { directory: path })
+        Ok(Self { directory: path.to_path_buf() })
     }
 
     pub fn create_watch(
