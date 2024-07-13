@@ -1,3 +1,7 @@
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::BufWriter;
+use std::io::Write;
 use std::net::TcpStream;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::Sender;
@@ -21,10 +25,26 @@ pub enum Message {
 }
 
 fn message_loop(project: Project, stream: TcpStream, error_stream: Sender<Error>) {
-    loop {
-        println!("Processing message");
+    let mut reader = BufReader::new(stream);
+    let mut data = vec![0; 512 * 64];
 
-        let Ok(message): Result<Message, _> = serde_json::from_reader(&stream) else {
+    loop {
+        data.clear();
+
+        let bytes = match reader.read_until(0x0A, &mut data) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                let _ = error_stream.send(Error::SocketClosed);
+                return;
+            }
+        };
+
+        if bytes == 0 {
+            let _ = error_stream.send(Error::SocketClosed);
+            return;
+        }
+
+        let Ok(message): Result<Message, _> = serde_json::from_slice(data.as_slice()) else {
             let _ = error_stream.send(Error::Deserialization);
             continue;
         };
@@ -45,16 +65,17 @@ fn changes_loop(
     changes: Receiver<ObjectEvent>,
     error_stream: Sender<Error>,
 ) {
-    for event in changes {
-        println!("Processing change");
+    let mut data = vec![0; 512 * 64];
 
-        match event {
+    for event in changes {
+        data.clear();
+        let mut writer = BufWriter::new(&mut data);
+
+        if let Err(_e) = match event {
             ObjectEvent::Deleted(id) => {
-                if let Err(_e) = serde_json::to_writer(&mut stream, &Message::Delete { id: id }) {
-                    let _ = error_stream.send(Error::Serialization);
-                };
+                serde_json::to_writer(&mut writer, &Message::Delete { id: id })
             }
-            ObjectEvent::Modified(id) | ObjectEvent::Added(id) => {
+            ObjectEvent::Added(id) => {
                 let object = match project.read(&id) {
                     Ok(object) => object,
                     Err(e) => {
@@ -62,13 +83,21 @@ fn changes_loop(
                         continue;
                     }
                 };
-                if let Err(_e) =
-                    serde_json::to_writer(&mut stream, &Message::Push { id: id, object })
-                {
-                    let _ = error_stream.send(Error::Serialization);
-                }
+                serde_json::to_writer(&mut writer, &Message::Push { id: id, object })
             }
+        } {
+            let _ = error_stream.send(Error::Serialization);
         }
+
+        if let Err(_e) = writer.write(&[0x0A]) {
+            let _ = error_stream.send(Error::Serialization);
+        }
+
+        if let Err(_e) = stream.write(writer.buffer()) {
+            let _ = error_stream.send(Error::SocketClosed);
+
+            return;
+        };
     }
 }
 
@@ -85,7 +114,7 @@ impl Server {
     pub fn spawn(self) -> Result<(PollWatcher, Receiver<Error>), Error> {
         let project_clone = self.project.clone();
         let Ok(stream_clone) = self.stream.try_clone() else {
-            return Err(Error::SocketFailure);
+            return Err(Error::SocketClosed);
         };
 
         let (tx, rx) = std::sync::mpsc::channel();

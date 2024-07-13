@@ -1,4 +1,4 @@
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     InvalidPath,
     FileOpen,
@@ -9,5 +9,7 @@ pub enum Error {
     WatcherPoll,
     Serialization,
     Deserialization,
-    SocketFailure,
+    SocketClosed,
+    SocketWrite,
+    SocketRead,
 }

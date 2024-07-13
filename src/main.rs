@@ -10,6 +10,7 @@ use std::{
 
 use clap::{Arg, Command};
 
+use error::*;
 use project::*;
 use server::*;
 
@@ -43,6 +44,10 @@ fn main() {
         let (_watcher, errors) = server.spawn().unwrap();
 
         for error in errors {
+            if error == Error::SocketClosed {
+                break;
+            }
+
             println!("Error occured: {:?}", error);
         }
     }

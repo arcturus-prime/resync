@@ -12,7 +12,6 @@ use crate::error::*;
 #[derive(Debug)]
 pub enum ObjectEvent {
     Deleted(String),
-    Modified(String),
     Added(String),
 }
 
@@ -39,27 +38,29 @@ impl notify::EventHandler for EventIdUnwrapper {
             .paths
             .iter()
             .map(|path| {
-                path.strip_prefix(&self.directory)
+                let path_str = path
+                    .strip_prefix(&self.directory)
                     .unwrap()
                     .to_str()
-                    .unwrap()
-                    .to_string()
+                    .unwrap();
+                let decoded_path_str = URL_SAFE.decode(path_str).unwrap();
+                String::from_utf8(decoded_path_str).unwrap()
             })
             .collect::<Vec<_>>()
         {
             match event.kind {
-                notify::EventKind::Any => todo!(),
-                notify::EventKind::Access(_) => {}
+                notify::EventKind::Any
+                | notify::EventKind::Access(_)
+                | notify::EventKind::Other => todo!(),
                 notify::EventKind::Create(_) => {
                     let _ = self.tx.send(ObjectEvent::Added(id));
                 }
                 notify::EventKind::Modify(_) => {
-                    let _ = self.tx.send(ObjectEvent::Modified(id));
+                    let _ = self.tx.send(ObjectEvent::Added(id));
                 }
                 notify::EventKind::Remove(_) => {
                     let _ = self.tx.send(ObjectEvent::Deleted(id));
                 }
-                notify::EventKind::Other => todo!(),
             };
         }
     }
