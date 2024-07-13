@@ -38,6 +38,8 @@ fn main() {
     loop {
         let (stream, _addr) = listener.accept().unwrap();
 
+            println!("NEW CONNECTION");
+
         let project = Project::open(path.to_path_buf()).unwrap();
         let server = Server::open(project, stream).unwrap();
 

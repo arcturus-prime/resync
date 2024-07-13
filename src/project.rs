@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
-use base64::{engine::general_purpose::URL_SAFE, Engine as _};
+use hex::{decode, encode};
 use notify::{Config, PollWatcher, RecursiveMode, Watcher};
 
 use crate::error::*;
@@ -38,28 +38,37 @@ impl notify::EventHandler for EventIdUnwrapper {
             .paths
             .iter()
             .map(|path| {
+                if path == &self.directory {
+                    return None;
+                }
+                
                 let path_str = path
                     .strip_prefix(&self.directory)
                     .unwrap()
                     .to_str()
                     .unwrap();
-                let decoded_path_str = URL_SAFE.decode(path_str).unwrap();
-                String::from_utf8(decoded_path_str).unwrap()
+
+                let decoded_path_str = decode(path_str).unwrap();
+                Some(String::from_utf8(decoded_path_str).unwrap())
             })
             .collect::<Vec<_>>()
         {
+            if id.is_none() {
+                continue;
+            }
+
             match event.kind {
                 notify::EventKind::Any
                 | notify::EventKind::Access(_)
                 | notify::EventKind::Other => todo!(),
                 notify::EventKind::Create(_) => {
-                    let _ = self.tx.send(ObjectEvent::Added(id));
+                    let _ = self.tx.send(ObjectEvent::Added(id.unwrap()));
                 }
                 notify::EventKind::Modify(_) => {
-                    let _ = self.tx.send(ObjectEvent::Added(id));
+                    let _ = self.tx.send(ObjectEvent::Added(id.unwrap()));
                 }
                 notify::EventKind::Remove(_) => {
-                    let _ = self.tx.send(ObjectEvent::Deleted(id));
+                    let _ = self.tx.send(ObjectEvent::Deleted(id.unwrap()));
                 }
             };
         }
@@ -103,7 +112,7 @@ impl Project {
     }
 
     pub fn read(&self, id: &str) -> Result<serde_json::Value, Error> {
-        let path = self.directory.join(URL_SAFE.encode(id));
+        let path = self.directory.join(encode(id));
 
         let Ok(mut object_file) = File::open(path) else {
             return Err(Error::FileOpen);
@@ -122,7 +131,7 @@ impl Project {
     }
 
     pub fn write(&self, id: &str, object: serde_json::Value) -> Result<(), Error> {
-        let path = self.directory.join(URL_SAFE.encode(id));
+        let path = self.directory.join(encode(id));
 
         let Ok(mut type_file) = File::create(path) else {
             return Err(Error::FileOpen);
@@ -140,7 +149,7 @@ impl Project {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Error> {
-        let path = self.directory.join(URL_SAFE.encode(id));
+        let path = self.directory.join(encode(id));
 
         if remove_file(path).is_err() {
             return Err(Error::FileDelete);

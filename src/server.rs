@@ -31,6 +31,8 @@ fn message_loop(project: Project, stream: TcpStream, error_stream: Sender<Error>
     loop {
         data.clear();
 
+        println!("NEW MESSAGE ATTEMPT");
+
         let bytes = match reader.read_until(0x0A, &mut data) {
             Ok(bytes) => bytes,
             Err(_) => {
@@ -43,6 +45,8 @@ fn message_loop(project: Project, stream: TcpStream, error_stream: Sender<Error>
             let _ = error_stream.send(Error::SocketClosed);
             return;
         }
+
+        println!("NEW MESSAGE");
 
         let Ok(message): Result<Message, _> = serde_json::from_slice(data.as_slice()) else {
             let _ = error_stream.send(Error::Deserialization);
@@ -68,6 +72,8 @@ fn changes_loop(
     let mut data = vec![0; 512 * 64];
 
     for event in changes {
+        println!("NEW CHANGE");
+
         data.clear();
         let mut writer = BufWriter::new(&mut data);
 
