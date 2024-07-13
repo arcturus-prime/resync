@@ -9,5 +9,5 @@ pub enum Error {
     WatcherPoll,
     Serialization,
     Deserialization,
-    ConnectionFailure,
+    SocketFailure,
 }
