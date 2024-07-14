@@ -51,3 +51,7 @@ pub struct Global {
     location: usize,
     r#type: String,
 }
+
+## Planning
+- Eventually switch to a muilt-client architecture. Any client may open a socket and push changes. Any and all changes to files just get sent to all clients.
+- Define a standard IR in this document (the above is a very, very rough draft)
