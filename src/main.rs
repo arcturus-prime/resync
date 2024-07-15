@@ -1,6 +1,5 @@
 mod database;
 mod error;
-mod filemap;
 mod ir;
 mod server;
 
