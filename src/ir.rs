@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+pub type ObjectRef = usize;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub r#type: String,
+    pub r#type: ObjectRef,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -14,13 +16,14 @@ pub struct EnumValue {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind")]
 pub enum TypeInfo {
     Pointer {
-        to_type: String,
+        to_type: ObjectRef,
     },
     FnPointer {
-        arg_types: Vec<String>,
-        ret_type: String,
+        arg_types: Vec<ObjectRef>,
+        ret_type: ObjectRef,
     },
     Struct {
         fields: Vec<StructField>,
@@ -29,7 +32,7 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: String,
+        item_type: ObjectRef,
     },
     None,
 }
@@ -37,24 +40,27 @@ pub enum TypeInfo {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
-    pub r#type: String,
+    pub r#type: ObjectRef,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind")]
 pub enum Object {
     Type {
+        name: String,
         size: usize,
         alignment: usize,
         info: TypeInfo,
     },
     Function {
-        location: usize,
-        size: usize,
-        args: Vec<Argument>,
-        ret_type: String,
+        name: String,
+        blocks: Vec<(usize, usize)>,
+        arguments: Vec<Argument>,
+        return_type: ObjectRef,
     },
     Global {
+        name: String,
         location: usize,
-        r#type: String,
+        r#type: ObjectRef,
     }
 }

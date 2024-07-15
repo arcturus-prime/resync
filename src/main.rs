@@ -10,7 +10,6 @@ use std::{
 };
 
 use clap::{Arg, Command};
-use tokio::fs::create_dir_all;
 
 use database::Database;
 use server::create_server;
@@ -27,17 +26,10 @@ async fn main() {
     let project_name = matches.get_one::<String>("project").unwrap();
 
     let path = Path::new(project_name).to_path_buf();
-
-    if !path.exists() {
-        create_dir_all(&path).await.unwrap();
-    }
-
-    let database = Database::open(path).await.unwrap();
+    let database = Arc::new(Database::open(&path).await.unwrap());
 
     let port = *matches.get_one::<u16>("port").unwrap_or(&12007);
     let address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 
-    create_server(address, port, Arc::new(database))
-        .await
-        .unwrap();
+    create_server(address, port, database).await.unwrap();
 }

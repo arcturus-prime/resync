@@ -9,16 +9,14 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
 
-use crate::database::Database;
+use crate::{database::Database, ir::ObjectRef};
 use crate::error::Error;
 use crate::ir::Object;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ObjectBody {
-    id: String,
-    object: Object,
+#[derive(Clone)]
+pub struct AppState {
+    database: Arc<Database>,
 }
 
 pub async fn create_server(
@@ -27,17 +25,17 @@ pub async fn create_server(
     database: Arc<Database>,
 ) -> Result<(), Error> {
     let socket_addr = SocketAddr::new(address, port);
-    
+
     let Ok(listener) = tokio::net::TcpListener::bind(socket_addr).await else {
         return Err(Error::SocketOpen);
     };
 
     let app = Router::new()
-        .route("/objects", post(post_objects))
-        .route("/objects", get(get_objects))
+        .route("/objects", post(push_objects))
+        .route("/objects", get(pull_objects))
         .route("/objects", delete(delete_objects))
-        .route("/changes", get(get_changes))
-        .with_state(database);
+        .route("/changes", post(get_changes))
+        .with_state(AppState { database });
 
     if axum::serve(listener, app).await.is_err() {
         return Err(Error::RouterInit);
@@ -46,43 +44,40 @@ pub async fn create_server(
     Ok(())
 }
 
-async fn delete_objects(
-    State(database): State<Arc<Database>>,
-    Json(messages): Json<Vec<String>>,
+async fn push_objects(
+    State(state): State<AppState>,
+    Json(body): Json<Vec<(ObjectRef, Object)>>,
 ) -> StatusCode {
-    for id in messages {
-        database.delete(&id).await.unwrap();
+    for object in body {
+        state.database.write(object.0, object.1).await.unwrap();
     }
 
     StatusCode::OK
 }
 
-async fn post_objects(
-    State(database): State<Arc<Database>>,
-    Json(messages): Json<Vec<ObjectBody>>,
-) -> StatusCode {
-    for message in messages {
-        database.write(&message.id, message.object).await.unwrap();
+async fn delete_objects(State(state): State<AppState>, Json(body): Json<Vec<ObjectRef>>) -> StatusCode {
+    for id in body {
+        state.database.delete(id).await.unwrap();
     }
 
     StatusCode::OK
 }
 
-async fn get_objects(
-    State(database): State<Arc<Database>>,
-    Json(messages): Json<Vec<String>>,
-) -> (StatusCode, Json<Vec<Object>>) {
-    let mut objects = Vec::new();
+async fn pull_objects(
+    State(state): State<AppState>,
+    Json(body): Json<Vec<ObjectRef>>,
+) -> (StatusCode, Json<Vec<(ObjectRef, Object)>>) {
+    let mut results = Vec::new();
 
-    for id in messages {
-        let object = database.read(&id).await.unwrap();
+    for id in body {
+        let object = state.database.read(id).await.unwrap();
 
-        objects.push(object);
+        results.push((id, object))
     }
 
-    (StatusCode::OK, Json(objects))
+    (StatusCode::OK, Json(results))
 }
 
-async fn get_changes(State(database): State<Arc<Database>>) -> (StatusCode, Json<Vec<()>>) {
+async fn get_changes(State(state): State<AppState>) -> (StatusCode, Json<Vec<()>>) {
     (StatusCode::OK, Json(Vec::new()))
 }
