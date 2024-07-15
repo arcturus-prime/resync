@@ -6,8 +6,7 @@ edition = "2021"
 [dependencies]
 axum = "0.7.5"
 clap = "4.5.9"
-notify = "6.1.1"
 serde_json = "1.0.120"
 serde = { version = "1.0.204", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
-base32 = "0.5.0"
+git2 = "0.19.0"
