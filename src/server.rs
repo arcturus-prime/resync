@@ -12,7 +12,7 @@ use axum::{
 
 use crate::database::Database;
 use crate::error::Error;
-use crate::ir::{Type, Global, Function};
+use crate::ir::Object;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -30,10 +30,14 @@ pub async fn create_server(
         return Err(Error::SocketOpen);
     };
 
+    database.create("global");
+    database.create("function");
+    database.create("type");
+
     let app = Router::new()
-        .route("/global", post(write_global))
-        .route("/global", get(pull_objects))
-        .route("/global", delete(delete_objects))
+        .route("/object", post(push_object))
+        .route("/object", get(pull_objects))
+        .route("/object", delete(delete_objects))
         .route("/changes", post(get_changes))
         .with_state(AppState { database });
 
@@ -44,19 +48,19 @@ pub async fn create_server(
     Ok(())
 }
 
-async fn write_global(
+async fn push_object(
     State(state): State<AppState>,
-    Json(body): Json<Vec<(String, Global)>>,
+    Json(body): Json<Vec<Object>>,
 ) -> StatusCode {
-    for pair in body {
-        state.database.write_global(&pair.0, &pair.1).await.unwrap();
+    for object in body {
+        state.database.write().await.unwrap();
     }
 
     StatusCode::OK
 }
 
-async fn delete_objects(State(state): State<AppState>, Json(body): Json<Vec<ObjectName>>) -> StatusCode {
-    for id in body {
+async fn delete_objects(State(state): State<AppState>, Json(body): Json<Vec<String>>) -> StatusCode {
+    for name in body {
         state.database.delete(id).await.unwrap();
     }
 
@@ -65,8 +69,8 @@ async fn delete_objects(State(state): State<AppState>, Json(body): Json<Vec<Obje
 
 async fn pull_objects(
     State(state): State<AppState>,
-    Json(body): Json<Vec<ObjectName>>,
-) -> (StatusCode, Json<Vec<(ObjectName, Object)>>) {
+    Json(body): Json<Vec<String>>,
+) -> (StatusCode, Json<Vec<Object>>) {
     let mut results = Vec::new();
 
     for id in body {

@@ -5,39 +5,10 @@ use tokio::fs::create_dir_all;
 use tokio::sync::Mutex;
 
 use crate::error::Error;
-use crate::ir::{Function, Global, Type};
+use crate::ir::Object;
 
 pub struct Database {
     conn: Mutex<Connection>,
-}
-
-async fn init_sqlite(conn: &Connection) {
-    conn.execute(
-        "
-        PRAGMA foreign_keys = ON;
-
-        CREATE TABLE global (
-            name TEXT PRIMARY KEY,
-            location INTEGER,
-            FOREIGN KEY(type) REFERENCES type(name)
-        );
-
-        CREATE TABLE function (
-            name TEXT PRIMARY KEY,
-            FOREIGN KEY(return_type) REFERENCES type(name), 
-            blocks JSON,
-            arguments JSON,
-        );
-
-        CREATE TABLE type (
-            name TEXT PRIMARY KEY,
-            size INTEGER,
-            alignment INTEGER,
-            info JSON
-        );
-    ",
-        (),
-    );
 }
 
 impl Database {
@@ -48,79 +19,87 @@ impl Database {
             }
         }
 
-        let mut conn = match Connection::open(path) {
+        let conn = match Connection::open(path) {
             Ok(conn) => conn,
             Err(_) => return Err(Error::DatabaseOpen),
         };
-
-        if !path.exists() {
-            init_sqlite(&mut conn);
-        }
 
         Ok(Self {
             conn: Mutex::new(conn),
         })
     }
-}
 
-impl Database {
-    pub async fn read_global(&self, name: &String) -> Result<Global, Error> {
+    pub async fn create(&self, name: &str) -> Result<(), Error> {
         let conn = self.conn.lock().await;
 
-        let Ok(mut statement) = conn.prepare("SELECT location, type FROM global WHERE name = ?1") else {
-            return Err(Error::DatabaseRead)
-        };
-
-        let Ok(global) = statement.query_row([name], |row|
-            Ok(Global {
-                location: row.get(0)?,
-                r#type: row.get(1)?
-            })
+        let Ok(mut statment) = conn.prepare_cached(
+            "CREATE TABLE IF NOT EXISTS ?1 (
+                name TEXT PRIMARY KEY,
+                time INTEGER,
+                data JSON
+            )",
         ) else {
-            return Err(Error::DatabaseRead)
+            return Err(Error::DatabaseWrite);
         };
 
-        Ok(global)
-    }
-
-    pub async fn write_global(&self, name: &String, global: &Global) -> Result<(), Error> {
-        let conn = self.conn.lock().await;
-
-        if conn.execute(
-            "INSERT INTO global (name, location, type) VALUES (?1, ?2, ?3)",
-            (name, &global.location, &global.r#type),
-        ).is_err() {
+        if statment.execute([name]).is_err() {
             return Err(Error::DatabaseWrite)
         }
 
         Ok(())
     }
 
-    pub async fn delete_global(&self, name: String) -> Result<(), Error> {
-        todo!()
+    pub async fn read(&self, table: &str, name: &str) -> Result<Object, Error> {
+        let conn = self.conn.lock().await;
+
+        let Ok(mut statment) = conn.prepare_cached("SELECT (name, time, data) FROM ?1 WHERE name = ?2") else {
+            return Err(Error::DatabaseRead);
+        };
+
+        let Ok(result) = statment.query_row([table, name], |row| {
+            let data: String = row.get(2)?;
+            let Ok(info) = serde_json::from_str(&data) else {
+                return rusqlite::Result::Err(rusqlite::Error::InvalidColumnType(2, "ObjectInfo".to_owned(), rusqlite::types::Type::Blob))
+            };
+
+            Ok(Object {
+                name: row.get(0)?,
+                time: row.get(1)?,
+                info
+            })
+        }) else {
+            return Err(Error::DatabaseRead);
+        };
+
+        Ok(result)
     }
 
-    pub async fn read_function(&self, name: String) -> Result<Function, Error> {
-        todo!()
-    }
+    pub async fn write(&self, table: &str, data: Object) -> Result<(), Error> {
+        let conn = self.conn.lock().await;
 
-    pub async fn write_function(&self, name: String, function: Function) -> Result<(), Error> {
-        todo!()
-    }
+        let Ok(mut statment) = conn.prepare_cached(
+            "BEGIN tran
+            IF EXISTS (SELECT name FROM ?1 WHERE name = ?2)
+            BEGIN
+                UPDATE ?1 SET time = ?3, data = ?4 WHERE name = ?2;
+            END
+            ELSE
+            BEGIN
+                INSERT INTO ?1 (name, time, data) VALUES (?2, ?3, ?4)
+            END
+            COMMIT tran",
+        ) else {
+            return Err(Error::DatabaseWrite);
+        };
 
-    pub async fn delete_function(&self, name: String) -> Result<(), Error> {
-        todo!()
-    }
+        let Ok(data_buffer) = serde_json::to_string(&data.info) else {
+            return Err(Error::Serialization)
+        };
 
-    pub async fn read_type(&self, name: String) -> Result<Type, Error> {
-        todo!()
-    }
+        if statment.execute((table, &data.name, data.time, &data_buffer)).is_err() {
+            return Err(Error::DatabaseWrite)
+        }
 
-    pub async fn write_type(&self, name: String, type_: Type) -> Result<(), Error> {
-        todo!()
-    }
-
-    pub async fn delete_type(&self, name: String) -> Result<(), Error> {
-        todo!()
+        Ok(())
     }
 }
