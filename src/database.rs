@@ -1,85 +1,126 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use git2::Repository;
-use tokio::fs::{create_dir_all, remove_file, File};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use rusqlite::{Connection, Result};
+use tokio::fs::create_dir_all;
 use tokio::sync::Mutex;
 
 use crate::error::Error;
-use crate::ir::{Object, ObjectRef};
+use crate::ir::{Function, Global, Type};
 
 pub struct Database {
-    path: PathBuf,
-    repo: Mutex<Repository>,
+    conn: Mutex<Connection>,
+}
+
+async fn init_sqlite(conn: &Connection) {
+    conn.execute(
+        "
+        PRAGMA foreign_keys = ON;
+
+        CREATE TABLE global (
+            name TEXT PRIMARY KEY,
+            location INTEGER,
+            FOREIGN KEY(type) REFERENCES type(name)
+        );
+
+        CREATE TABLE function (
+            name TEXT PRIMARY KEY,
+            FOREIGN KEY(return_type) REFERENCES type(name), 
+            blocks JSON,
+            arguments JSON,
+        );
+
+        CREATE TABLE type (
+            name TEXT PRIMARY KEY,
+            size INTEGER,
+            alignment INTEGER,
+            info JSON
+        );
+    ",
+        (),
+    );
 }
 
 impl Database {
     pub async fn open(path: &Path) -> Result<Self, Error> {
-        let repo;
-
         if !path.exists() {
             if create_dir_all(path).await.is_err() {
-                return Err(Error::FileWrite);
+                return Err(Error::DatabaseOpen);
             }
-            repo = match Repository::init(path) {
-                Ok(repo) => repo,
-                Err(_) => return Err(Error::FileWrite),
-            };
-        } else {
-            repo = match Repository::open(path) {
-                Ok(repo) => repo,
-                Err(_) => return Err(Error::FileOpen),
-            }
+        }
+
+        let mut conn = match Connection::open(path) {
+            Ok(conn) => conn,
+            Err(_) => return Err(Error::DatabaseOpen),
+        };
+
+        if !path.exists() {
+            init_sqlite(&mut conn);
         }
 
         Ok(Self {
-            path: path.to_path_buf(),
-            repo: Mutex::new(repo),
+            conn: Mutex::new(conn),
         })
     }
+}
 
-    pub async fn read(&self, id: ObjectRef) -> Result<Object, Error> {
-        let Ok(mut object_file) = File::open(self.path.join(id.to_string())).await else {
-            return Err(Error::FileOpen);
+impl Database {
+    pub async fn read_global(&self, name: &String) -> Result<Global, Error> {
+        let conn = self.conn.lock().await;
+
+        let Ok(mut statement) = conn.prepare("SELECT location, type FROM global WHERE name = ?1") else {
+            return Err(Error::DatabaseRead)
         };
 
-        let mut data = Vec::new();
-        if object_file.read_to_end(&mut data).await.is_err() {
-            return Err(Error::FileRead);
+        let Ok(global) = statement.query_row([name], |row|
+            Ok(Global {
+                location: row.get(0)?,
+                r#type: row.get(1)?
+            })
+        ) else {
+            return Err(Error::DatabaseRead)
         };
 
-        let Ok(object) = serde_json::from_slice(data.as_slice()) else {
-            return Err(Error::Deserialization);
-        };
-
-        Ok(object)
+        Ok(global)
     }
 
-    pub async fn write(&self, id: ObjectRef, object: Object) -> Result<(), Error> {
-        let Ok(mut type_file) = File::create(self.path.join(id.to_string())).await else {
-            return Err(Error::FileOpen);
-        };
+    pub async fn write_global(&self, name: &String, global: &Global) -> Result<(), Error> {
+        let conn = self.conn.lock().await;
 
-        let Ok(data) = serde_json::to_vec(&object) else {
-            return Err(Error::Serialization);
-        };
-
-        if type_file.write_all(data.as_slice()).await.is_err() {
-            return Err(Error::FileWrite);
+        if conn.execute(
+            "INSERT INTO global (name, location, type) VALUES (?1, ?2, ?3)",
+            (name, &global.location, &global.r#type),
+        ).is_err() {
+            return Err(Error::DatabaseWrite)
         }
 
         Ok(())
     }
 
-    pub async fn delete(&self, id: ObjectRef) -> Result<(), Error> {
-        if remove_file(self.path.join(id.to_string())).await.is_err() {
-            return Err(Error::FileDelete);
-        }
-
-        Ok(())
+    pub async fn delete_global(&self, name: String) -> Result<(), Error> {
+        todo!()
     }
 
-    pub async fn commit(&self) -> Result<(), Error> {
-        Ok(())
+    pub async fn read_function(&self, name: String) -> Result<Function, Error> {
+        todo!()
+    }
+
+    pub async fn write_function(&self, name: String, function: Function) -> Result<(), Error> {
+        todo!()
+    }
+
+    pub async fn delete_function(&self, name: String) -> Result<(), Error> {
+        todo!()
+    }
+
+    pub async fn read_type(&self, name: String) -> Result<Type, Error> {
+        todo!()
+    }
+
+    pub async fn write_type(&self, name: String, type_: Type) -> Result<(), Error> {
+        todo!()
+    }
+
+    pub async fn delete_type(&self, name: String) -> Result<(), Error> {
+        todo!()
     }
 }

@@ -1,11 +1,10 @@
 #[derive(Debug, Eq, PartialEq)]
 pub enum Error {
-    FileOpen,
-    FileRead,
-    FileWrite,
-    FileDelete,
     Serialization,
     Deserialization,
+    DatabaseOpen,
     SocketOpen,
     RouterInit,
+    DatabaseWrite,
+    DatabaseRead,
 }

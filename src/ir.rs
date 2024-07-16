@@ -1,12 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-pub type ObjectRef = usize;
+// HELPER OBJECTS
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub r#type: ObjectRef,
+    pub r#type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,13 +17,14 @@ pub struct EnumValue {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
     Pointer {
-        to_type: ObjectRef,
+        to: String,
     },
     FnPointer {
-        arg_types: Vec<ObjectRef>,
-        ret_type: ObjectRef,
+        args: Vec<String>,
+        ret: String,
     },
     Struct {
         fields: Vec<StructField>,
@@ -32,35 +33,46 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: ObjectRef,
+        item: String,
     },
     None,
+}
+
+impl Default for TypeInfo {
+    fn default() -> Self {
+        TypeInfo::None
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
-    pub r#type: ObjectRef,
+    pub r#type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "kind")]
-pub enum Object {
-    Type {
-        name: String,
-        size: usize,
-        alignment: usize,
-        info: TypeInfo,
-    },
-    Function {
-        name: String,
-        blocks: Vec<(usize, usize)>,
-        arguments: Vec<Argument>,
-        return_type: ObjectRef,
-    },
-    Global {
-        name: String,
-        location: usize,
-        r#type: ObjectRef,
-    }
+pub struct Block(usize, usize);
+
+// PRIMARY OBJECTS
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Type {
+    pub size: usize,
+    pub alignment: usize,
+
+    #[serde(default)]
+    pub info: TypeInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Function {
+    pub blocks: Vec<Block>,
+    pub arguments: Vec<Argument>,
+    pub return_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Global {
+    pub location: usize,
+    pub r#type: String,
 }

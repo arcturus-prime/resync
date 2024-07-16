@@ -10,6 +10,7 @@ class DecompilerInterface(binaryninja.BinaryDataNotification):
         super(DecompilerInterface, self).__init__()
         self.func_map = {}
         self.type_map = {}
+        self.global_map = {}
         self.last_id = 0
 
     def id_binal_type(self, type_):
@@ -32,6 +33,16 @@ class DecompilerInterface(binaryninja.BinaryDataNotification):
 
         return binal_id
 
+    def id_binal_global(self, func):
+        binal_id = self.global_map.get(func.name)
+        if binal_id is None:
+            self.global_map[func.name] = self.last_id
+            binal_id = self.last_id
+
+            self.last_id += 1
+
+        return binal_id
+
     def create_binal_function(self, func):
         ranges = []
         for r in func.address_ranges:
@@ -41,17 +52,17 @@ class DecompilerInterface(binaryninja.BinaryDataNotification):
         for parameter in func.type.parameters:
             arguments.append({ "name": parameter.name, "type": self.id_binal_type(parameter.type) })
 
-        binal_func = { "kind": "Function", "name": func.name, "blocks": ranges, "return_type": self.id_binal_type(func.return_type), "arguments": arguments }
+        binal_func = { "kind": "function", "name": func.name, "blocks": ranges, "return_type": self.id_binal_type(func.return_type), "arguments": arguments }
 
         return binal_func
 
     def create_binal_type(self, type_):
-        info = { "kind": "None" }
-        if type_.type_class == TypeClass.PointerTypeClass:
-            info["kind"] = "Pointer"
-            info["to_type"] = self.id_binal_type(type_.children[0])
+        binal_type = { "kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment }
 
-        binal_type = { "kind": "Type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment, "info": info }
+        if type_.type_class == TypeClass.PointerTypeClass:
+            binal_type["info"] = {}
+            binal_type["info"]["kind"] = "pointer"
+            binal_type["info"]["to"] = self.id_binal_type(type_.children[0])
 
         return binal_type
 
