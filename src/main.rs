@@ -1,7 +1,7 @@
 mod database;
 mod error;
-mod ir;
 mod server;
+mod ir;
 
 use std::{
     net::{IpAddr, Ipv4Addr},

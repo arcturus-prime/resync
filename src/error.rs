@@ -1,10 +1,8 @@
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 pub enum Error {
-    Serialization,
-    Deserialization,
-    DatabaseOpen,
-    SocketOpen,
-    RouterInit,
-    DatabaseWrite,
-    DatabaseRead,
+    Serde(serde_json::Error),
+    Axum(axum::Error),
+    SQLite(rusqlite::Error),
+    Io(std::io::Error),
+    Timestamp
 }

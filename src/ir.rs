@@ -2,20 +2,20 @@ use serde::{Deserialize, Serialize};
 
 // HELPER OBJECTS
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
     pub r#type: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
@@ -33,19 +33,39 @@ impl Default for TypeInfo {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Argument {
     pub name: String,
     pub r#type: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Block(usize, usize);
-
 // PRIMARY OBJECTS
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum ObjectInfo {
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Type {
+    size: usize,
+    alignment: usize,
+
+    #[serde(default)]
+    info: TypeInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Function {
+    blocks: Vec<(usize, usize)>,
+    arguments: Vec<Argument>,
+    return_type: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Global {
+    location: usize,
+    r#type: String,
+}
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum Object {
     Type {
         size: usize,
         alignment: usize,
@@ -54,19 +74,12 @@ pub enum ObjectInfo {
         info: TypeInfo,
     },
     Function {
-        blocks: Vec<Block>,
+        blocks: Vec<(usize, usize)>,
         arguments: Vec<Argument>,
         return_type: String,
     },
     Global {
         location: usize,
         r#type: String,
-    },
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Object {
-    pub name: String,
-    pub time: usize,
-    pub info: ObjectInfo,
+    }
 }
