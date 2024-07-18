@@ -27,10 +27,13 @@ impl Database {
 
         if let Err(e) = conn.execute(
             "CREATE TABLE IF NOT EXISTS main (
-                name TEXT PRIMARY KEY,
-                time INTEGER,
-                data JSON
-            )",
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                time INTEGER NOT NULL,
+                data DATA,
+
+                CONSTRAINT name_kind PRIMARY KEY (name, kind)
+            );",
             (),
         ) {
             return Err(Error::SQLite(e));
@@ -43,24 +46,24 @@ impl Database {
         Ok(database)
     }
 
-    pub async fn read(&self, name: &str) -> Result<Object, Error> {
+    pub async fn read<T: Object>(&self, name: &str) -> Result<T, Error> {
         let conn = self.conn.lock().await;
 
-        let mut statment =
-            match conn.prepare_cached("SELECT name, time, data FROM main WHERE name = ?1") {
-                Ok(statement) => statement,
-                Err(e) => return Err(Error::SQLite(e)),
-            };
+        let mut statment = match conn
+            .prepare_cached("SELECT name, time, data FROM main WHERE sname = ?1, kind = ?2")
+        {
+            Ok(statement) => statement,
+            Err(e) => return Err(Error::SQLite(e)),
+        };
 
-        let callback = |row: &Row| -> rusqlite::Result<Object> {
-            let data: String = row.get(2)?;
-            let json = serde_json::from_str(&data);
+        let callback = |row: &Row| -> rusqlite::Result<T> {
+            let data: Vec<u8> = row.get(3)?;
 
-            let result = match json {
+            let result = match bitcode::decode(&data) {
                 Ok(data) => data,
                 Err(e) => {
                     return Result::Err(rusqlite::Error::InvalidColumnType(
-                        2,
+                        3,
                         e.to_string(),
                         rusqlite::types::Type::Blob,
                     ))
@@ -70,7 +73,7 @@ impl Database {
             Ok(result)
         };
 
-        let result = match statment.query_row([name], callback) {
+        let result = match statment.query_row([name, T::NAME], callback) {
             Ok(result) => result,
             Err(e) => return Err(Error::SQLite(e)),
         };
@@ -78,63 +81,60 @@ impl Database {
         Ok(result)
     }
 
-    pub async fn write(&self, name: &str, data: &Object) -> Result<(), Error> {
+    pub async fn write<T: Object>(&self, name: &str, data: &T) -> Result<(), Error> {
         let conn = self.conn.lock().await;
 
         let mut statment = match conn.prepare_cached(
-            "INSERT INTO main(name, time, data) VALUES(?1, ?2, ?3)
-            ON CONFLICT (name) DO UPDATE SET time = ?2, data = ?3",
+            "INSERT INTO main (name, kind, time, data) VALUES(?1, ?2, ?3, ?4) ON CONFLICT (name, kind) DO UPDATE SET time = ?3, data = ?4;",
         ) {
             Ok(statement) => statement,
             Err(e) => return Err(Error::SQLite(e)),
         };
 
-        let data_buffer = match serde_json::to_string(data) {
-            Ok(buffer) => buffer,
-            Err(e) => return Err(Error::Serde(e)),
-        };
+        let data_buffer = bitcode::encode(data);
 
         let now = SystemTime::now();
         let Ok(timestamp) = now.duration_since(UNIX_EPOCH) else {
             return Err(Error::Timestamp);
         };
 
-        if let Err(e) = statment.execute((name, timestamp.as_secs(), data_buffer)) {
+        if let Err(e) = statment.execute((name, T::NAME, timestamp.as_secs(), data_buffer)) {
             return Err(Error::SQLite(e));
         }
 
         Ok(())
     }
 
-    pub async fn remove(&self, name: &str) -> Result<(), Error> {
+    pub async fn remove<T: Object>(&self, name: &str) -> Result<(), Error> {
         let conn = self.conn.lock().await;
 
-        let mut statment = match conn.prepare_cached("DELETE FROM main WHERE name = ?1") {
+        let mut statment = match conn.prepare_cached("DELETE FROM main WHERE name = ?1, kind = ?2")
+        {
             Ok(statement) => statement,
             Err(e) => return Err(Error::SQLite(e)),
         };
 
-        if let Err(e) = statment.execute([name]) {
+        if let Err(e) = statment.execute([name, T::NAME]) {
             return Err(Error::SQLite(e));
         };
 
         Ok(())
     }
 
-    pub async fn changes(&self, timestamp: usize) -> Result<Vec<(String, Object)>, Error> {
+    pub async fn changes<T: Object>(&self, timestamp: usize) -> Result<Vec<(String, T)>, Error> {
         let conn = self.conn.lock().await;
 
-        let mut statment = match conn.prepare_cached("SELECT name, data FROM main WHERE time > ?1")
-        {
-            Ok(statement) => statement,
-            Err(e) => return Err(Error::SQLite(e)),
-        };
+        let mut statment =
+            match conn.prepare_cached("SELECT name, data FROM main WHERE time > ?1, kind = ?2") {
+                Ok(statement) => statement,
+                Err(e) => return Err(Error::SQLite(e)),
+            };
 
-        let callback = |row: &Row| -> rusqlite::Result<(String, Object)> {
-            let data: String = row.get(1)?;
+        let callback = |row: &Row| -> rusqlite::Result<(String, T)> {
+            let data: Vec<u8> = row.get(1)?;
             let name: String = row.get(0)?;
 
-            let object = match serde_json::from_str(&data) {
+            let object = match bitcode::decode(&data) {
                 Ok(object) => object,
                 Err(e) => {
                     return Result::Err(rusqlite::Error::InvalidColumnType(
@@ -148,7 +148,7 @@ impl Database {
             Ok((name, object))
         };
 
-        let result = match statment.query_map([timestamp], callback) {
+        let result = match statment.query_map((timestamp, T::NAME), callback) {
             Ok(statement) => statement,
             Err(e) => return Err(Error::SQLite(e)),
         };

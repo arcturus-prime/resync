@@ -1,21 +1,22 @@
+use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
 // HELPER OBJECTS
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
     pub r#type: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
@@ -33,7 +34,7 @@ impl Default for TypeInfo {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Argument {
     pub name: String,
     pub r#type: String,
@@ -41,7 +42,11 @@ pub struct Argument {
 
 // PRIMARY OBJECTS
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+pub trait Object: Sized + for<'a> Decode<'a> + Encode + Serialize + for<'a> Deserialize<'a> {
+    const NAME: &'static str;  
+}
+
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Type {
     size: usize,
     alignment: usize,
@@ -50,36 +55,27 @@ pub struct Type {
     info: TypeInfo,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+impl Object for Type {
+    const NAME: &'static str = "type";
+}
+
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Function {
     blocks: Vec<(usize, usize)>,
     arguments: Vec<Argument>,
     return_type: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+impl Object for Function {
+    const NAME: &'static str = "function";
+}
+
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Global {
     location: usize,
-    r#type: String,
+    type_: String,
 }
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "kind")]
-#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
-pub enum Object {
-    Type {
-        size: usize,
-        alignment: usize,
 
-        #[serde(default)]
-        info: TypeInfo,
-    },
-    Function {
-        blocks: Vec<(usize, usize)>,
-        arguments: Vec<Argument>,
-        return_type: String,
-    },
-    Global {
-        location: usize,
-        r#type: String,
-    }
+impl Object for Global {
+    const NAME: &'static str = "global";
 }
