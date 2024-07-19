@@ -7,15 +7,11 @@ host = "http://127.0.0.1:12007"
 
 class Lifter:
     def create_binal_function(self, func):
-        ranges = []
-        for r in func.address_ranges:
-            ranges.append((r.start, r.end))
-
         arguments = []
         for parameter in func.type.parameters:
             arguments.append({ "name": parameter.name, "type": parameter.type.get_string() })
 
-        binal_func = { "blocks": ranges, "return_type": func.return_type.get_string(), "arguments": arguments }
+        binal_func = { "location": func.start, "return_type": func.return_type.get_string(), "arguments": arguments }
 
         return binal_func
 
@@ -40,9 +36,7 @@ class Lifter:
         types.append([ func.return_type.get_string(), self.create_binal_type(func.return_type) ])
 
         r = requests.put(host + "/type", json=types)
-        print(r.status_code, r.text)
         r = requests.put(host + "/function", json=[[func.name, self.create_binal_function(func) ]])
-        print(r.status_code, r.text)
 
     def push_type(self, type_):
         types = []
@@ -58,6 +52,21 @@ class Lifter:
         global_ = requests.get(host + "/global/" + timestamp)
 
         print(type_, function, global_)
+
+class Compiler:
+    def compile_binal_type(self, type_):
+
+
+    def compile_binal_argument(self, bnf, arg):
+        
+
+    def compile_binal_function(self, func):
+        bnf = bv.create_user_function(func.location)
+
+        ret = self.compile_binal_type(func.return_type)
+        bnf.set_auto_return_type(ret)
+
+        bnf.set_auto_parameter_vars()
 
 class DecompilerInterface(binaryninja.BinaryDataNotification):
     def __init__(self):

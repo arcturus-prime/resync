@@ -6,7 +6,7 @@ use tokio::fs::create_dir_all;
 use tokio::sync::Mutex;
 
 use crate::error::Error;
-use crate::ir::Object;
+use crate::ir::{Object, F32, F64, I128, I16, I32, I64, I8, U128, U16, U32, U64, U8};
 
 pub struct Database {
     conn: Mutex<Connection>,
@@ -50,14 +50,14 @@ impl Database {
         let conn = self.conn.lock().await;
 
         let mut statment = match conn
-            .prepare_cached("SELECT name, time, data FROM main WHERE sname = ?1, kind = ?2")
+            .prepare_cached("SELECT name, time, data FROM main WHERE name = ?1 AND kind = ?2")
         {
             Ok(statement) => statement,
             Err(e) => return Err(Error::SQLite(e)),
         };
 
         let callback = |row: &Row| -> rusqlite::Result<T> {
-            let data: Vec<u8> = row.get(3)?;
+            let data: Vec<u8> = row.get(2)?;
 
             let result = match bitcode::decode(&data) {
                 Ok(data) => data,
@@ -73,7 +73,7 @@ impl Database {
             Ok(result)
         };
 
-        let result = match statment.query_row([name, T::NAME], callback) {
+        let result = match statment.query_row([name, T::KIND], callback) {
             Ok(result) => result,
             Err(e) => return Err(Error::SQLite(e)),
         };
@@ -98,7 +98,7 @@ impl Database {
             return Err(Error::Timestamp);
         };
 
-        if let Err(e) = statment.execute((name, T::NAME, timestamp.as_secs(), data_buffer)) {
+        if let Err(e) = statment.execute((name, T::KIND, timestamp.as_secs(), data_buffer)) {
             return Err(Error::SQLite(e));
         }
 
@@ -114,7 +114,7 @@ impl Database {
             Err(e) => return Err(Error::SQLite(e)),
         };
 
-        if let Err(e) = statment.execute([name, T::NAME]) {
+        if let Err(e) = statment.execute([name, T::KIND]) {
             return Err(Error::SQLite(e));
         };
 
@@ -148,7 +148,7 @@ impl Database {
             Ok((name, object))
         };
 
-        let result = match statment.query_map((timestamp, T::NAME), callback) {
+        let result = match statment.query_map((timestamp, T::KIND), callback) {
             Ok(statement) => statement,
             Err(e) => return Err(Error::SQLite(e)),
         };

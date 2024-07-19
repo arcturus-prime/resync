@@ -25,13 +25,6 @@ pub enum TypeInfo {
     Struct { fields: Vec<StructField> },
     Enum { values: Vec<EnumValue> },
     Array { item: String },
-    None,
-}
-
-impl Default for TypeInfo {
-    fn default() -> Self {
-        TypeInfo::None
-    }
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
@@ -43,31 +36,29 @@ pub struct Argument {
 // PRIMARY OBJECTS
 
 pub trait Object: Sized + for<'a> Decode<'a> + Encode + Serialize + for<'a> Deserialize<'a> {
-    const NAME: &'static str;  
+    const KIND: &'static str;
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Type {
     size: usize,
     alignment: usize,
-
-    #[serde(default)]
     info: TypeInfo,
 }
 
 impl Object for Type {
-    const NAME: &'static str = "type";
+    const KIND: &'static str = "type";
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Function {
-    blocks: Vec<(usize, usize)>,
+    location: usize,
     arguments: Vec<Argument>,
     return_type: String,
 }
 
 impl Object for Function {
-    const NAME: &'static str = "function";
+    const KIND: &'static str = "function";
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
@@ -77,5 +68,5 @@ pub struct Global {
 }
 
 impl Object for Global {
-    const NAME: &'static str = "global";
+    const KIND: &'static str = "global";
 }

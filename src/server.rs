@@ -17,15 +17,6 @@ use crate::{
     ir::{Function, Global, Type},
 };
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "kind")]
-#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
-pub enum ObjectJSON {
-    Type(Type),
-    Function(Function),
-    Global(Global),
-}
-
 #[derive(Clone)]
 pub struct AppState {
     database: Arc<Database>,
@@ -71,7 +62,7 @@ async fn push<T: Object>(
 ) -> StatusCode {
     for pair in body {
         if let Err(e) = state.database.write(&pair.0, &pair.1).await {
-            println!("{:?}", e);
+            println!("ERRROR: {:?}", e);
             return StatusCode::UNPROCESSABLE_ENTITY;
         };
     }
@@ -86,8 +77,12 @@ async fn pull<T: Object>(
     let mut results = Vec::new();
 
     for name in body {
-        let Ok(result) = state.database.read(&name).await else {
-            return (StatusCode::UNPROCESSABLE_ENTITY, Json(Vec::new()));
+        let result = match state.database.read(&name).await {
+            Ok(result) => result,
+            Err(e) => {
+                println!("ERRROR: {:?}", e);
+                return (StatusCode::UNPROCESSABLE_ENTITY, Json(Vec::new()));
+            }
         };
 
         results.push(result)
@@ -96,9 +91,13 @@ async fn pull<T: Object>(
     (StatusCode::OK, Json(results))
 }
 
-async fn remove<T: Object>(State(state): State<AppState>, Json(body): Json<Vec<String>>) -> StatusCode {
+async fn remove<T: Object>(
+    State(state): State<AppState>,
+    Json(body): Json<Vec<String>>,
+) -> StatusCode {
     for name in body {
-        let Ok(_) = state.database.remove::<T>(&name).await else {
+        if let Err(e) = state.database.remove::<T>(&name).await {
+            println!("ERRROR: {:?}", e);
             return StatusCode::UNPROCESSABLE_ENTITY;
         };
     }
@@ -110,8 +109,12 @@ async fn changes<T: Object>(
     State(state): State<AppState>,
     Query(params): Query<usize>,
 ) -> (StatusCode, Json<Vec<(String, T)>>) {
-    let Ok(changes) = state.database.changes(params).await else {
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new()));
+    let changes = match state.database.changes(params).await {
+        Ok(changes) => changes,
+        Err(e) => {
+            println!("ERROR: {:?}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new()));
+        }
     };
 
     (StatusCode::OK, Json(changes))
