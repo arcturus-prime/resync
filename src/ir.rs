@@ -20,8 +20,8 @@ pub struct EnumValue {
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
-    Pointer { to: String },
-    FnPointer { args: Vec<String>, ret: String },
+    Pointer { to: String, depth: usize },
+    Function { args: Vec<String>, ret: String },
     Struct { fields: Vec<StructField> },
     Enum { values: Vec<EnumValue> },
     Array { item: String },

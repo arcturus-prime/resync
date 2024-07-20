@@ -6,7 +6,7 @@ use tokio::fs::create_dir_all;
 use tokio::sync::Mutex;
 
 use crate::error::Error;
-use crate::ir::{Object, F32, F64, I128, I16, I32, I64, I8, U128, U16, U32, U64, U8};
+use crate::ir::Object;
 
 pub struct Database {
     conn: Mutex<Connection>,
