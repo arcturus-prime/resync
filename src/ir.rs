@@ -1,5 +1,8 @@
 use bitcode::{Decode, Encode};
+use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
+
+use crate::error::Error;
 
 // HELPER OBJECTS
 
@@ -7,7 +10,7 @@ use serde::{Deserialize, Serialize};
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub r#type: String,
+    pub field_type: String,
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
@@ -20,34 +23,63 @@ pub struct EnumValue {
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
-    Pointer { to: String, depth: usize },
-    Function { args: Vec<String>, ret: String },
+    Pointer { to_type: String, depth: usize },
+    Function { arg_types: Vec<String>, return_type: String },
     Struct { fields: Vec<StructField> },
     Enum { values: Vec<EnumValue> },
-    Array { item: String },
+    Array { item_type: String },
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Argument {
     pub name: String,
-    pub r#type: String,
+    pub arg_type: String,
+}
+
+#[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
+pub struct PointerType {
+    to_type: String, depth: usize 
 }
 
 // PRIMARY OBJECTS
 
-pub trait Object: Sized + for<'a> Decode<'a> + Encode + Serialize + for<'a> Deserialize<'a> {
-    const KIND: &'static str;
+pub trait DBObject: Sized + for<'a> Decode<'a> + Encode + Serialize + for<'a> Deserialize<'a> {
+    type Row;
+
+    async fn read(row: Self::Row) -> Result<Self, Error>;
+    async fn write(object: &Self) -> Result<Self::Row, Error>;
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
-pub struct Type {
+pub struct Type<T> {
+    name: String,
     size: usize,
     alignment: usize,
-    info: TypeInfo,
+    info: T,
 }
 
-impl Object for Type {
-    const KIND: &'static str = "type";
+async fn decode_with_bitcode<'a, T: Decode<'a>>(data: &'a [u8]) -> Result<T, Error> {
+    match bitcode::decode(data) {
+        Ok(info) => info,
+        Err(e) => return Err(Error::Bitcode(e))
+    }
+}
+
+impl DBObject for Type<PointerType> {
+    type Row = (String, usize, usize, String, String);
+
+    async fn read(row: Self::Row) -> Result<Self, Error> {
+        Ok(Self {
+            name: row.0,
+            size: row.1,
+            alignment: row.2,
+            info: ,
+        })
+    }
+
+    async fn write(object: Self) -> Result<Self::Row, Error> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
@@ -57,16 +89,32 @@ pub struct Function {
     return_type: String,
 }
 
-impl Object for Function {
-    const KIND: &'static str = "function";
+impl DBObject for Function {
+    type Row;
+
+    async fn read(row: &Self::Row) -> Result<Self, Error> {
+        todo!()
+    }
+
+    async fn write(object: &Self) -> Result<Self::Row, Error> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Decode, Encode, Serialize, Deserialize, Clone)]
 pub struct Global {
     location: usize,
-    type_: String,
+    global_type: String,
 }
 
-impl Object for Global {
-    const KIND: &'static str = "global";
+impl DBObject for Global {
+    type Row;
+
+    async fn read(row: &Self::Row) -> Result<Self, Error> {
+        todo!()
+    }
+
+    async fn write(object: &Self) -> Result<Self::Row, Error> {
+        todo!()
+    }
 }
