@@ -6,15 +6,11 @@ use std::{
 use axum::{
     extract::{Query, State},
     http::StatusCode,
-    routing::{delete, get, post, put},
+    routing::{get, put},
     Json, Router,
 };
 
-use crate::{database::Database, ir::Object};
-use crate::{
-    error::Error,
-    ir::{Function, Global, Type},
-};
+use crate::{database::Database, error::Error, ir::{Function, Global, Object, Type}};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -34,17 +30,11 @@ pub async fn create_server(
     };
 
     let app = Router::new()
-        .route("/type", put(push::<Type>))
-        .route("/type", post(pull::<Type>))
-        .route("/type", delete(remove::<Type>))
+        .route("/type", put(push::<Type>).post(pull::<Type>). delete(remove::<Type>))
         .route("/type/:timestamp", get(changes::<Type>))
-        .route("/function", put(push::<Function>))
-        .route("/function", post(pull::<Function>))
-        .route("/function", delete(remove::<Function>))
+        .route("/function", put(push::<Function>).post(pull::<Function>).delete(remove::<Function>))
         .route("/function/:timestamp", get(changes::<Function>))
-        .route("/global", put(push::<Global>))
-        .route("/global", post(pull::<Global>))
-        .route("/global", delete(remove::<Global>))
+        .route("/global", put(push::<Global>).post(pull::<Global>).delete(remove::<Global>))
         .route("/global/:timestamp", get(changes::<Global>))
         .with_state(AppState { database });
 
@@ -58,15 +48,15 @@ pub async fn create_server(
 async fn push<T: Object>(
     State(state): State<AppState>,
     Json(body): Json<Vec<(String, T)>>,
-) -> StatusCode {
+) -> (StatusCode, Json<Error>) {
     for pair in body {
         if let Err(e) = state.database.write(&pair.0, &pair.1).await {
             println!("ERRROR: {:?}", e);
-            return StatusCode::UNPROCESSABLE_ENTITY;
+            return (StatusCode::UNPROCESSABLE_ENTITY, Json(e))
         };
     }
 
-    StatusCode::OK
+    (StatusCode::OK, Json(Error::None))
 }
 
 async fn pull<T: Object>(
@@ -76,15 +66,13 @@ async fn pull<T: Object>(
     let mut results = Vec::new();
 
     for name in body {
-        let result = match state.database.read(&name).await {
-            Ok(result) => result,
+        match state.database.read(&name).await {
+            Ok(result) => results.push(result),
             Err(e) => {
                 println!("ERRROR: {:?}", e);
                 return (StatusCode::UNPROCESSABLE_ENTITY, Json(Vec::new()));
             }
         };
-
-        results.push(result)
     }
 
     (StatusCode::OK, Json(results))

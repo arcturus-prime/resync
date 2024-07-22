@@ -1,13 +1,8 @@
-[package]
-name = "binal"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-axum = "0.7.5"
-clap = "4.5.9"
-bitcode = "0.6.3"
-serde_json = "1.0.120"
-serde = { version = "1.0.204", features = ["derive"] }
-tokio = { version = "1.38.0", features = ["full"] }
-rusqlite = { version = "0.31.0", features = ["bundled"] }
+[workspace]
+resolver = "2"
+default-members = ["binal"]
+members = [
+    "binal",
+    "binal-database",
+    "binal-database-macros"
+]

@@ -1,7 +1,4 @@
-mod database;
-mod error;
 mod server;
-mod ir;
 
 use std::{
     net::{IpAddr, Ipv4Addr},
@@ -18,7 +15,7 @@ use server::create_server;
 async fn main() {
     let matches = Command::new("Binal")
         .version("1.0")
-        .about("External client for managing Binal projects `1Z.")
+        .about("External client for managing Binal projects")
         .arg(Arg::new("project").required(true))
         .arg(Arg::new("port").long("port").required(false))
         .get_matches();
@@ -30,6 +27,8 @@ async fn main() {
 
     let port = *matches.get_one::<u16>("port").unwrap_or(&12007);
     let address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+    println!("ddd {}", port)
 
     create_server(address, port, database).await.unwrap();
 }
