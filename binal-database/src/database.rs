@@ -73,15 +73,19 @@ impl<'a, I: Sync + sqlx::Type<Sqlite> + for<'b> sqlx::Encode<'b, Sqlite>, T: Obj
 		Ok(())
 	}
 
-	// pub async fn read(&self, id: &I) -> Result<T, Error> {
+	pub async fn read(&self, id: &I) -> Result<T, Error> {
+		todo!()
+	}
 
-	// }
+	pub async fn delete(&self, id: &I) -> Result<(), Error> {
+		todo!()
+	}
 
-	// pub async fn delete(&self, id: &I) -> Result<(), Error> {
-		
-	// }
+	pub async fn changes(&self, time: usize) -> Result<Vec<T>, Error> {
+		todo!()
+	}
+}
 
-	// pub async fn changes(&self, time: usize) -> Result<Vec<T>, Error> {
-		
-	// }
+macro_rules! generate_create_query {
+    ($l:expr) => ();
 }

@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use binal_database_macros::Object;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EnumValue {
