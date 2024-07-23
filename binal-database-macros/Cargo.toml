@@ -8,5 +8,5 @@ proc-macro = true
 
 [dependencies]
 quote = "1.0.36"
-sqlx = "0.7.4"
+rusqlite = { version = "0.32.0", features = [ "bundled"] }
 syn = "2.0.71"

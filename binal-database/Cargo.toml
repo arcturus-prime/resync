@@ -7,6 +7,6 @@ edition = "2021"
 serde = "1.0.204"
 tokio = { version = "1.38.0", features = ["full"] }
 bitcode = { version = "0.6.3", features = ["serde"] }
-sqlx = { version = "0.7.4", features = ["sqlite"] }
+rusqlite = { version = "0.32.0", features = [ "bundled"] }
 
 binal-database-macros = { path = "../binal-database-macros" }

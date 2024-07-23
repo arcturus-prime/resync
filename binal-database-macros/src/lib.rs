@@ -10,9 +10,9 @@ fn convert_to_sql_type(type_: &Type) -> String {
     match type_ {
         Type::Array(_) => todo!(),
         Type::BareFn(_) => todo!(),
-        Type::Group(g) => String::from("Deez"),
+        Type::Group(_) => todo!(),
         Type::ImplTrait(_) => todo!(),
-        Type::Infer(i) => String::from("djasd"),
+        Type::Infer(_) => todo!(),
         Type::Macro(_) => todo!(),
         Type::Never(_) => todo!(),
         Type::Paren(_) => todo!(),
@@ -22,8 +22,8 @@ fn convert_to_sql_type(type_: &Type) -> String {
         Type::Slice(_) => todo!(),
         Type::TraitObject(_) => todo!(),
         Type::Tuple(_) => todo!(),
-        Type::Verbatim(v) => v.to_string(),
-        _ => String::from("whar"),
+        Type::Verbatim(_) => todo!(),
+        _ => todo!(),
     }
 
 }
@@ -82,11 +82,12 @@ pub fn derive_object(input: TokenStream) -> TokenStream {
     let id_name_string = id_name.to_string();
     let id_type_string = convert_to_sql_type(id_type);
 
-    let row_range = (1..names.len()).into_iter();
+    let row_range = (1..=names.len()).into_iter().map(|i| syn::Index::from(i));
 
     let code = quote! {
-        impl crate::traits::Object<#id_type> for #name {
-            type Row = (#(#types),*);
+        impl crate::object::Object for #name {
+            type Row = (#id_type, #(#types),*);
+            type Index = #id_type;
 
             const NAME: &'static str = #name_string;
 
@@ -96,17 +97,17 @@ pub fn derive_object(input: TokenStream) -> TokenStream {
             const COLUMN_NAMES: &'static [&'static str] = &[#(#column_names),*];
             const COLUMN_TYPES: &'static [&'static str] = &[#(#column_types),*];
 
-            fn to_row(&self) -> Self::Row {
+            fn to_row(self) -> Self::Row {
                 (self.#id_name, #(self.#names),*)
             }
 
-            fn from_row(row: &Self::Row) -> Self {
+            fn from_row(row: Self::Row) -> Self {
                 Self {
                     #id_name: row.0, #(#names: row.#row_range,)*
                 }
             }
 
-            fn id<'a>(&'a self) -> &#id_type {
+            fn id<'a>(&'a self) -> &Self::Index {
                 &self.#id_name
             }
         }

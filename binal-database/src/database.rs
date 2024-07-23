@@ -2,20 +2,20 @@ use std::marker::PhantomData;
 use std::time;
 use std::{path::Path, str::FromStr};
 
-use sqlx::{Encode, IntoArguments, Sqlite, SqlitePool};
+use rusqlite::Connection;
 use tokio::fs::create_dir_all;
+use tokio::sync::Mutex;
 
 use crate::error::Error;
-use crate::traits::Object;
+use crate::object::{generate_create_query, generate_upsert_query, Object};
 
 pub struct Database {
-	pool: SqlitePool,
+	connection: Mutex<Connection>,
 }
 
-pub struct Table<'a, I, T: Object<I>> {
+pub struct Table<'a, T: Object> {
 	db: &'a Database,
 	phantom: PhantomData<T>,
-	phantom_2: PhantomData<I>,
 }
 
 impl Database {
@@ -28,64 +28,43 @@ impl Database {
 			create_dir_all(path_parent).await?;
         }
 
-        let Some(path_string) = path.to_str() else {
-        	return Err(Error::Path("Path could not be converted to a string!"))
-        };
-
-        let mut db_string = String::from_str("sqlite://").unwrap();
-        db_string.push_str(path_string);
-        db_string.push_str("?mode=\"rwc\"");
-
-        let pool = SqlitePool::connect(&db_string).await?;
+        let conn = Connection::open(&path)?;
 
         Ok(Self {
-        	pool
+        	connection: Mutex::new(conn)
         })
 	}
 
-	pub async fn create<'b, I, T: Object<I>>(&'b self) -> Result<Table<'b, I, T>, Error> {
-		let mut conn = self.pool.acquire().await?;
+	pub async fn create<'b, T: Object>(&'b self) -> Result<Table<'b, T>, Error> {
+		let conn = self.connection.lock().await;
 
-		sqlx::query(&format!("CREATE TABLE IF NOT EXISTS {} (
-		    id TEXT NOT NULL PRIMARY KEY,
-		    time BIGINT NOT NULL,
-		    data DATA,
-		);", T::NAME)).execute(&mut *conn).await?;
+		conn.execute(&generate_create_query::<T>(), ());
 
-		Ok(Table::<'b, I, T> {
+		Ok(Table::<'b, T> {
 		    db: &self,
 		    phantom: PhantomData,
-    		phantom_2: PhantomData,
 		})
 	}
 }
 
-impl<'a, I: Sync + sqlx::Type<Sqlite> + for<'b> sqlx::Encode<'b, Sqlite>, T: Object<I>> Table<'a, I, T> {
-	pub async fn write(&self, object: &T) -> Result<(), Error> {
-		let mut conn = self.db.pool.acquire().await?;
+impl<'a, T: Object> Table<'a, T> {
+	pub async fn write(&self, object: T) -> Result<(), Error> {
+		let conn = self.db.connection.lock().await;
 
-		let query_string = format!("INSERT INTO {} (id, time, data) VALUES(?1, ?2, ?3) ON CONFLICT (id) DO UPDATE SET time = ?2, data = ?3;", T::NAME);
-		let time = time::SystemTime::now().duration_since(time::UNIX_EPOCH).unwrap();
-		let data = bitcode::serialize(object).unwrap();
-
-		sqlx::query(&query_string).bind(object.id()).bind(time.as_secs() as u32).bind(data).execute(&mut *conn);
+		conn.execute(&generate_upsert_query::<T>(), object.to_row());
 
 		Ok(())
 	}
 
-	pub async fn read(&self, id: &I) -> Result<T, Error> {
+	pub async fn read(&self, id: &T::Index) -> Result<T, Error> {
 		todo!()
 	}
 
-	pub async fn delete(&self, id: &I) -> Result<(), Error> {
+	pub async fn delete(&self, id: &T::Index) -> Result<(), Error> {
 		todo!()
 	}
 
 	pub async fn changes(&self, time: usize) -> Result<Vec<T>, Error> {
 		todo!()
 	}
-}
-
-macro_rules! generate_create_query {
-    ($l:expr) => ();
 }
