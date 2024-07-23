@@ -9,5 +9,6 @@ clap = "4.5.9"
 serde_json = "1.0.120"
 serde = { version = "1.0.204", features = ["derive"] }
 tokio = { version = "1.38.0", features = ["full"] }
+axum-macros = "0.4.1"
 
 binal-database = { path = "../binal-database" }

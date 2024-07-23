@@ -1,5 +1,6 @@
-use binal_database_macros::Object;
 use serde::{Deserialize, Serialize};
+
+use binal_database_macros::Object;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EnumValue {
@@ -15,12 +16,12 @@ pub struct Argument {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ArrayType {
-    item_type: String,
+    pub item_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EnumType {
-    values: Vec<EnumValue>,
+    pub values: Vec<EnumValue>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -32,19 +33,19 @@ pub struct StructField {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct StructType {
-    fields: Vec<StructField>,
+    pub fields: Vec<StructField>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct FunctionType {
-    arg_types: Vec<String>,
-    return_type: String,
+    pub arg_types: Vec<String>,
+    pub return_type: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PointerType {
-    to_type: String,
-    depth: usize,
+    pub to_type: String,
+    pub depth: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -59,25 +60,27 @@ pub enum TypeInfo {
 #[derive(Debug, Object, Serialize, Deserialize, Clone)]
 pub struct Type {
     #[id]
-    name: String,
-    size: usize,
-    alignment: usize,
-    info: TypeInfo,
+    pub name: String,
+    pub size: usize,
+    pub alignment: usize,
+    #[bitcode]
+    pub info: TypeInfo,
 }
 
 #[derive(Debug, Object, Serialize, Deserialize, Clone)]
 pub struct Function {
     #[id]
-    name: String,
-    location: usize,
-    arguments: Vec<Argument>,
-    return_type: String,
+    pub name: String,
+    pub location: usize,
+    #[bitcode]
+    pub arguments: Vec<Argument>,
+    pub return_type: String,
 }
 
 #[derive(Debug, Object, Serialize, Deserialize, Clone)]
 pub struct Global {
     #[id]
-    name: String,
-    location: usize,
-    global_type: String,
+    pub name: String,
+    pub location: usize,
+    pub global_type: String,
 }

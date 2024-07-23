@@ -7,6 +7,6 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
+proc-macro2 = "1.0.86"
 quote = "1.0.36"
-rusqlite = { version = "0.32.0", features = [ "bundled"] }
 syn = "2.0.71"
