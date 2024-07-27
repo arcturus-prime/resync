@@ -1,86 +1,111 @@
+use std::{path::Path, time::Duration};
+
 use serde::{Deserialize, Serialize};
 
-use binal_database_macros::Object;
+use crate::error::Error;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+pub trait Database: Sized + Sync {
+    fn open(path: &Path) -> impl std::future::Future<Output = Result<Self, Error>> + Send;
+
+    fn write<T: Object>(
+        &self,
+        id: ObjectRef,
+        data: T,
+    ) -> impl std::future::Future<Output = Result<(), Error>> + Send;
+
+    fn read<T: Object>(
+        &self,
+        id: ObjectRef,
+    ) -> impl std::future::Future<Output = Result<T, Error>> + Send;
+
+    fn changes<T: Object>(
+        &self,
+        since: Duration,
+    ) -> impl std::future::Future<Output = Result<Vec<(ObjectRef, T)>, Error>> + Send;
+
+    fn remove<T: Object>(
+        &self,
+        id: ObjectRef,
+    ) -> impl std::future::Future<Output = Result<(), Error>> + Send;
+}
+
+pub trait Object: Serialize + for<'a> Deserialize<'a> + Send {
+    const ID: usize;
+}
+
+pub type ObjectRef = usize;
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: String,
+    pub arg_type: ObjectRef,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ArrayType {
-    pub item_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct EnumType {
-    pub values: Vec<EnumValue>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: String,
+    pub field_type: ObjectRef,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StructType {
-    pub fields: Vec<StructField>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct FunctionType {
-    pub arg_types: Vec<String>,
-    pub return_type: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct PointerType {
-    pub to_type: String,
-    pub depth: usize,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(tag = "kind")]
 pub enum TypeInfo {
-    Pointer(PointerType),
-    Function(FunctionType),
-    Struct(StructType),
-    Enum(EnumType),
-    Array(ArrayType),
+    Pointer {
+        to_type: ObjectRef,
+        depth: usize,
+    },
+    Function {
+        arg_types: Vec<ObjectRef>,
+        return_type: ObjectRef,
+    },
+    Struct {
+        fields: Vec<StructField>,
+    },
+    Enum {
+        values: Vec<EnumValue>,
+    },
+    Array {
+        item_type: ObjectRef,
+    },
 }
-
-#[derive(Debug, Object, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Type {
-    #[id]
-    pub name: String,
-    pub size: usize,
-    pub alignment: usize,
-    #[bitcode]
-    pub info: TypeInfo,
+    name: String,
+    size: usize,
+    alignment: usize,
+    info: TypeInfo,
 }
 
-#[derive(Debug, Object, Serialize, Deserialize, Clone)]
+impl Object for Type {
+    const ID: usize = 0;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Function {
-    #[id]
-    pub name: String,
-    pub location: usize,
-    #[bitcode]
-    pub arguments: Vec<Argument>,
-    pub return_type: String,
+    name: String,
+    location: usize,
+    arguments: Vec<Argument>,
+    return_type: ObjectRef,
 }
 
-#[derive(Debug, Object, Serialize, Deserialize, Clone)]
+impl Object for Function {
+    const ID: usize = 1;
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Global {
-    #[id]
-    pub name: String,
-    pub location: usize,
-    pub global_type: String,
+    name: String,
+    location: usize,
+    global_type: ObjectRef,
+}
+
+impl Object for Global {
+    const ID: usize = 2;
 }

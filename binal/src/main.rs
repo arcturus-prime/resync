@@ -3,12 +3,11 @@ mod server;
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::Path,
-    sync::Arc,
 };
 
 use clap::{value_parser, Arg, Command};
 
-use database::Database;
+use binal_database::{ir::Database, sqlite::SqliteDatabase};
 use server::create_server;
 
 #[tokio::main]
@@ -22,8 +21,8 @@ async fn main() {
 
     let project_name = matches.get_one::<String>("project").unwrap();
 
-    let path = Path::new(project_name).to_path_buf();
-    let database = Arc::new(Database::open(&path).await.unwrap());
+    let path = Path::new(project_name);
+    let database = SqliteDatabase::open(&path).await.unwrap();
 
     let port = *matches.get_one("port").unwrap_or(&12007);
     let address = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));

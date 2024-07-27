@@ -22,18 +22,21 @@ class Lifter:
 
     def get_pointer_info(self, type_) -> Tuple[str, int]:
         name, depth = self.get_pointer_info_subroutine(type_, 0)
-        return self.base_type_translation[name], depth
+        return name, depth
 
     def get_pointer_info_subroutine(self, type_, depth) -> Tuple[str, int]:
         if type_.type_class == TypeClass.PointerTypeClass:
-            base_type_name, depth = self.get_pointer_info_subroutine(type_.children[0], depth + 1)
+            return self.get_pointer_info_subroutine(type_.children[0], depth + 1)
 
-        return type_.get_string(), depth
+        if self.base_type_translation.get(type_.get_string()) is None:
+            return type_.get_string(), depth
+
+        return self.base_type_translation[type_.get_string()], depth
 
     def lift_binal_function(self, func):
         arguments = []
         for parameter in func.type.parameters:
-            arguments.append({ "name": parameter.name, "type": parameter.type.get_string() })
+            arguments.append({ "name": parameter.name, "type": parameter.type })
 
         binal_func = { "location": func.start, "return_type": func.return_type.get_string(), "arguments": arguments }
 
