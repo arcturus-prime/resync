@@ -3,5 +3,5 @@ resolver = "2"
 default-members = ["binal"]
 members = [
     "binal",
-    "binal-project",
+    "binal-project", "binal-server",
 ]

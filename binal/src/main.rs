@@ -1,5 +1,3 @@
-pub mod server;
-
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
@@ -7,10 +5,10 @@ use std::{
 };
 
 use clap::{value_parser, Arg, Command};
-use server::{Message, Server};
-
-use binal_project::project::{Project, Transaction};
 use tokio::sync::{mpsc::{Receiver, Sender}, Mutex};
+
+use binal_server::{Message, Server};
+use binal_project::{Project, Transaction};
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -59,25 +57,25 @@ async fn process_network(mut receive: Receiver<Message>, project: Arc<Mutex<Proj
         };
 
         match message {
-            server::Message::PushType { name, data } => {
+            Message::PushType { name, data } => {
                 transaction.types.insert(name, data);
             }
-            server::Message::PushGlobal { name, data } => {
+            Message::PushGlobal { name, data } => {
                 transaction.globals.insert(name, data);
             }
-            server::Message::PushFunction { name, data } => {
+            Message::PushFunction { name, data } => {
                 transaction.functions.insert(name, data);
             }
-            server::Message::DeleteType { name } => {
+            Message::DeleteType { name } => {
                 transaction.types.remove(&name);
             }
-            server::Message::DeleteGlobal { name } => {
+            Message::DeleteGlobal { name } => {
                 transaction.globals.remove(&name);
             }
-            server::Message::DeleteFunction { name } => {
+            Message::DeleteFunction { name } => {
                 transaction.functions.remove(&name);
             }
-            server::Message::EndTransaction => {
+            Message::EndTransaction => {
                 let mut project = project.lock().await;
 
                 if let Err(e) = project.process(transaction).await {
