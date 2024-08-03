@@ -1,49 +1,48 @@
-use std::default;
-
+use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Type {
-    size: usize,
-    alignment: usize,
+    pub size: usize,
+    pub alignment: usize,
 
     #[serde(default)]
-    info: TypeInfo,
+    pub info: TypeInfo,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Function {
-    location: usize,
-    arguments: Vec<Argument>,
-    return_type: String,
+    pub location: usize,
+    pub arguments: Vec<Argument>,
+    pub return_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Global {
-    location: usize,
-    global_type: String,
+    pub location: usize,
+    pub global_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
     pub arg_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
     pub field_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {

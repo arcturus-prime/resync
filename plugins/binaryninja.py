@@ -13,6 +13,7 @@ class Client:
     def send(self, data):
         binary_data = json.dumps(data) + "\n"
 
+        print(binary_data)
         self.socket.sendall(binary_data.encode('utf-8'))
 
     def recv(self):
@@ -28,6 +29,9 @@ class Client:
 
         return binary_data
 
+client = Client()
+client.connect(12007)
+
 class Lifter:
     def __init__(self):
         self.base_type_translation = {
@@ -41,7 +45,11 @@ class Lifter:
             "int8_t": "i8",
             "float": "f32",
             "double": "f64",
+            "char": "i8",
+            "short": "i16",
         }
+
+        self.object = {}
 
     def get_type_name(self, type_):
         if self.base_type_translation.get(type_.get_string()) is None:
@@ -83,16 +91,19 @@ class Lifter:
 
     def push_function(self, client: Client, func):
         for param in func.type.parameters:
-            self.push_type(client, param.type)
+            self.push_type_subroutine(client, param.type)
 
-        client.send({ "kind": "pushfunction", "name": self.get_type_name(func.return_type), "data": self.lift_binal_function(func) })
+        client.send({ "kind": "pushfunction", "name": func.name, "data": self.lift_binal_function(func) })
         client.send({ "kind": "endtransaction" })
 
-    def push_type(self, client: Client, type_: types.Type):
+    def push_type_subroutine(self, client: Client, type_: types.Type):
         for subtype in type_.children:
-            client.send({ "kind": "pushtype", "name": subtype.get_string(), "data": self.lift_binal_type(subtype)})
+            self.push_type_subroutine(client, subtype)
 
         client.send({ "kind": "pushtype", "name": self.get_type_name(type_), "data": self.lift_binal_type(type_) })
+
+    def push_type(self, client: Client, type_: types.Type):
+        self.push_type_subroutine(client, type_)
         client.send({ "kind": "endtransaction" })
 
 
@@ -117,32 +128,29 @@ class DecompilerInterface(binaryninja.BinaryDataNotification):
         super(DecompilerInterface, self).__init__()
 
         self.lifter = Lifter()
-        self.client = Client()
-
-        self.client.connect(12007)
 
     # -----
     # HOOKS
     # -----
 
     def function_added(self, view: 'BinaryView', func: 'function.Function') -> None:
-        print("FUNCTION ADDED")
         
-        self.lifter.push_function(self.client, func)
+        self.lifter.push_function(client, func)
 
     def function_updated(self, view: 'BinaryView', func: 'function.Function') -> None:
-        print("FUNCTION UPDATED")
         
-        self.lifter.push_function(self.client, func)
+        self.lifter.push_function(client, func)
 
     def function_removed(self, view: 'BinaryView', func: 'function.Function') -> None:
-        print("FUNCTION REMOVED")
+        pass
 
     def type_defined(self, view: 'BinaryView', name: 'types.QualifiedName', type: 'types.Type') -> None:
-        print("TYPE DEFINED")
 
-        self.lifter.push_type(self.client, type)
+        self.lifter.push_type(client, type)
 
     # def symbol_updated(self, view, sym):
 
 bv.register_notification(DecompilerInterface())
+
+# while True:
+    # message = client.recv()

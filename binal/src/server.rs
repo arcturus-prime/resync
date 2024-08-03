@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
-    sync::mpsc::{Receiver, Sender},
+    sync::mpsc::{error::SendError, Receiver, Sender},
 };
 
 use binal_project::ir::{Function, Global, Type};
@@ -12,11 +12,25 @@ use binal_project::ir::{Function, Global, Type};
 #[derive(Debug)]
 pub enum Error {
     Tcp(std::io::Error),
+    Json(serde_json::Error),
+    Mspc(SendError<Message>)
 }
 
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Self::Tcp(value)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Json(value)
+    }
+}
+
+impl From<SendError<Message>> for Error {
+    fn from(value: SendError<Message>) -> Self {
+        Self::Mspc(value)
     }
 }
 
@@ -50,11 +64,9 @@ impl Server {
             loop {
                 let (stream, _) = listener.accept().await.unwrap();
 
-                let Err(e) = Self::handler(&inside_tx, &mut inside_rx, stream).await else {
-                    panic!("Handler returned without error!")
-                };
+                println!("Accepted connection, starting handler...");
 
-                //TODO(AP): Handle errors
+                Self::handler(&inside_tx, &mut inside_rx, stream).await;
             }
         });
 
@@ -64,22 +76,48 @@ impl Server {
         })
     }
 
-    //TODO(AP): Error handling please
-    async fn handler(tx: &Sender<Message>, rx: &mut Receiver<Message>, stream: TcpStream) -> Result<(), Error> {
+    async fn handler(tx: &Sender<Message>, rx: &mut Receiver<Message>, stream: TcpStream) {
         let mut buffer = String::new();
         let mut stream = BufStream::new(stream);
 
         loop {
             tokio::select! {
-                _ = stream.read_line(&mut buffer) => {
-                    let message: Message = serde_json::from_str(&buffer).unwrap();
-                    tx.send(message).await.unwrap();
+                size = stream.read_line(&mut buffer) => {
+                    if let Err(e) = size {
+                        println!("Error reading from TCP stream: {}", e);
+                        return
+                    }
+
+                    let message: Message = match serde_json::from_str(&buffer) {
+                        Ok(message) => message,
+                        Err(e) => {
+                            println!("Failed to deserialize message: {}", e);
+                            buffer.clear();
+                            continue
+                        },
+                    };
+
+                    if let Err(e) = tx.send(message).await {
+                        println!("Error sending message through MSPC channel: {}", e);
+                        buffer.clear();
+                        continue;
+                    }
+
                     buffer.clear();
                 },
                 Some(message) = rx.recv() => {
                     //TODO(AP): Don't make a new vector every time we serialize
-                    let data = serde_json::to_vec(&message).unwrap();
-                    stream.write(&data).await.unwrap();
+                    let data = match serde_json::to_vec(&message) {
+                        Ok(data) => data,
+                        Err(e) => {
+                            println!("Failed to serialize message: {}", e);
+                            continue
+                        },
+                    };
+                    if let Err(e) = stream.write(&data).await {
+                        println!("Error writing message to TCP stream: {}", e);
+                        return
+                    }
                 }
             }
         }
