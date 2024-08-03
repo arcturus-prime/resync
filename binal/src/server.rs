@@ -1,92 +1,87 @@
-use std::{net::{IpAddr, SocketAddr}, time::Duration};
+use std::net::{IpAddr, SocketAddr};
 
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    routing::delete,
-    Json, Router,
+use serde::{Deserialize, Serialize};
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufStream},
+    net::TcpStream,
+    sync::mpsc::{Receiver, Sender},
 };
 
-use binal_database::{
-    error::Error, ir::{Database, Function, Global, Object, ObjectRef, Type}, sqlite::SqliteDatabase
-};
+use binal_project::ir::{Function, Global, Type};
 
-#[derive(Clone)]
-pub struct AppState {
-    pub database: SqliteDatabase,
+#[derive(Debug)]
+pub enum Error {
+    Tcp(std::io::Error),
 }
 
-pub async fn create_server(address: IpAddr, port: u16, database: SqliteDatabase) -> Result<(), Error> {
-    let socket_addr = SocketAddr::new(address, port);
-    let listener = tokio::net::TcpListener::bind(socket_addr).await?;
-
-    let state = AppState { database };
-
-    let app = Router::new()
-        .route("/type", delete(remove::<Type>).post(pull::<Type>).put(push::<Type>).get(changes::<Type>))
-        .route("/function", delete(remove::<Function>).post(pull::<Function>).put(push::<Function>).get(changes::<Function>))
-        .route("/global", delete(remove::<Global>).post(pull::<Global>).put(push::<Global>).get(changes::<Global>))
-        .with_state(state);
-
-    if let Err(e) = axum::serve(listener, app).await {
-        return Err(Error::Io(e));
-    };
-
-    Ok(())
-}
-
-async fn changes<T: Object>(State(state): State<AppState>, Query(time): Query<Duration>) -> (StatusCode, Json<Vec<(ObjectRef, T)>>) {
-    let results = match state.database.changes(time).await {
-        Ok(results) => results,
-        Err(e) => {
-            println!("ERRROR: {:?}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new()))
-        },
-    };
-
-    (StatusCode::OK, Json(results))
-}
-
-async fn push<T: Object>(
-    State(state): State<AppState>,
-    Json(body): Json<Vec<(ObjectRef, T)>>,
-) -> StatusCode {
-    for (id, object) in body {
-        if let Err(e) = state.database.write(id, object).await {
-            println!("ERRROR: {:?}", e);
-            return StatusCode::UNPROCESSABLE_ENTITY;
-        };
+impl From<std::io::Error> for Error {
+    fn from(value: std::io::Error) -> Self {
+        Self::Tcp(value)
     }
-
-    StatusCode::OK
 }
 
-async fn pull<T: Object>(
-    State(state): State<AppState>,
-    Json(body): Json<Vec<ObjectRef>>,
-) -> (StatusCode, Json<Vec<T>>) {
-    let mut results = Vec::new();
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum Message {
+    PushType { name: String, data: Type },
+    PushGlobal { name: String, data: Global },
+    PushFunction { name: String, data: Function },
+    DeleteType { name: String },
+    DeleteGlobal { name: String },
+    DeleteFunction { name: String },
+    EndTransaction,
+}
 
-    for id in body {
-        match state.database.read(id).await {
-            Ok(result) => results.push(result),
-            Err(e) => {
-                println!("ERRROR: {:?}", e);
-                return (StatusCode::UNPROCESSABLE_ENTITY, Json(Vec::new()));
+pub struct Server {
+    pub rx: Receiver<Message>,
+    pub tx: Sender<Message>,
+}
+
+impl Server {
+    pub async fn create(address: IpAddr, port: u16) -> Result<Self, Error> {
+        let (outside_tx, mut inside_rx) = tokio::sync::mpsc::channel(16);
+        let (inside_tx, outside_rx) = tokio::sync::mpsc::channel(16);
+
+        let socket_addr = SocketAddr::new(address, port);
+        let listener = tokio::net::TcpListener::bind(socket_addr).await?;
+
+        tokio::spawn(async move {
+            loop {
+                let (stream, _) = listener.accept().await.unwrap();
+
+                let Err(e) = Self::handler(&inside_tx, &mut inside_rx, stream).await else {
+                    panic!("Handler returned without error!")
+                };
+
+                //TODO(AP): Handle errors
             }
-        };
+        });
+
+        Ok(Self {
+            rx: outside_rx,
+            tx: outside_tx,
+        })
     }
 
-    (StatusCode::OK, Json(results))
-}
+    //TODO(AP): Error handling please
+    async fn handler(tx: &Sender<Message>, rx: &mut Receiver<Message>, stream: TcpStream) -> Result<(), Error> {
+        let mut buffer = String::new();
+        let mut stream = BufStream::new(stream);
 
-async fn remove<T: Object>(State(state): State<AppState>, Json(body): Json<Vec<ObjectRef>>) -> StatusCode {
-    for id in body {
-        if let Err(e) = state.database.remove::<T>(id).await {
-            println!("ERRROR: {:?}", e);
-            return StatusCode::UNPROCESSABLE_ENTITY;
-        };
+        loop {
+            tokio::select! {
+                _ = stream.read_line(&mut buffer) => {
+                    let message: Message = serde_json::from_str(&buffer).unwrap();
+                    tx.send(message).await.unwrap();
+                    buffer.clear();
+                },
+                Some(message) = rx.recv() => {
+                    //TODO(AP): Don't make a new vector every time we serialize
+                    let data = serde_json::to_vec(&message).unwrap();
+                    stream.write(&data).await.unwrap();
+                }
+            }
+        }
     }
-
-    StatusCode::OK
 }
