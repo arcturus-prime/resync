@@ -1,3 +1,7 @@
+mod ir;
+mod server;
+mod app;
+
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
@@ -7,8 +11,13 @@ use std::{
 use clap::{value_parser, Arg, Command};
 use tokio::sync::{mpsc::{Receiver, Sender}, Mutex};
 
-use binal_server::{Message, Server};
-use binal_project::{Project, Transaction};
+use server::{Message, Server};
+use ir::{Project, Transaction};
+
+pub struct State {
+    pub project: Project,
+    pub working_dir: PathBuf,
+}
 
 #[tokio::main(flavor = "multi_thread")]
 async fn main() {
@@ -36,9 +45,9 @@ async fn main() {
         .unwrap();
 
     let project = Arc::new(Mutex::new(if path.exists() {
-        Project::open(path.clone()).await.unwrap()
+        Project::open(&path).unwrap()
     } else {
-        Project::new(path.clone())
+        Project::new()
     }));
 
     tokio::spawn(process_network(server.rx, project.clone()));
@@ -50,30 +59,30 @@ async fn process_input(sender: Sender<Message>, project: Arc<Mutex<Project>>) {
 }
 
 async fn process_network(mut receive: Receiver<Message>, project: Arc<Mutex<Project>>) {
-    let mut transaction = Transaction::new();
+    let mut transaction = Project::new();
     loop {
         let Some(message) = receive.recv().await else {
             break;
         };
 
         match message {
-            Message::PushType { name, data } => {
-                transaction.types.insert(name, data);
+            Message::PushType { id, data } => {
+                transaction.types.insert(id, data);
             }
-            Message::PushGlobal { name, data } => {
-                transaction.globals.insert(name, data);
+            Message::PushGlobal { id, data } => {
+                transaction.globals.insert(id, data);
             }
-            Message::PushFunction { name, data } => {
-                transaction.functions.insert(name, data);
+            Message::PushFunction { id, data } => {
+                transaction.functions.insert(id, data);
             }
-            Message::DeleteType { name } => {
-                transaction.types.remove(&name);
+            Message::DeleteType { id } => {
+                transaction.types.remove(&id);
             }
-            Message::DeleteGlobal { name } => {
-                transaction.globals.remove(&name);
+            Message::DeleteGlobal { id } => {
+                transaction.globals.remove(&id);
             }
-            Message::DeleteFunction { name } => {
-                transaction.functions.remove(&name);
+            Message::DeleteFunction { id } => {
+                transaction.functions.remove(&id);
             }
             Message::EndTransaction => {
                 let mut project = project.lock().await;

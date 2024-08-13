@@ -7,7 +7,7 @@ use tokio::{
     sync::mpsc::{error::SendError, Receiver, Sender},
 };
 
-use binal_project::ir::{Function, Global, Type};
+use ir::{Function, Global, Type};
 
 #[derive(Debug)]
 pub enum Error {
@@ -38,12 +38,12 @@ impl From<SendError<Message>> for Error {
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
-    PushType { name: String, data: Type },
-    PushGlobal { name: String, data: Global },
-    PushFunction { name: String, data: Function },
-    DeleteType { name: String },
-    DeleteGlobal { name: String },
-    DeleteFunction { name: String },
+    PushType { id: usize, data: Type },
+    PushGlobal { id: usize, data: Global },
+    PushFunction { id: usize, data: Function },
+    DeleteType { id: usize },
+    DeleteGlobal { id: usize },
+    DeleteFunction { id: usize },
     EndTransaction,
 }
 
