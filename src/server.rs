@@ -1,13 +1,13 @@
-use std::net::{IpAddr, SocketAddr};
+use std::{net::{IpAddr, SocketAddr}, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufStream},
     net::TcpStream,
-    sync::mpsc::{error::SendError, Receiver, Sender},
+    sync::{mpsc::{error::SendError, Receiver, Sender}, Mutex},
 };
 
-use ir::{Function, Global, Type};
+use crate::ir::{Function, Global, Project, Type};
 
 #[derive(Debug)]
 pub enum Error {
@@ -66,7 +66,7 @@ impl Server {
 
                 println!("Accepted connection, starting handler...");
 
-                Self::handler(&inside_tx, &mut inside_rx, stream).await;
+                Self::tcp_handler(&inside_tx, &mut inside_rx, stream).await;
             }
         });
 
@@ -76,7 +76,7 @@ impl Server {
         })
     }
 
-    async fn handler(tx: &Sender<Message>, rx: &mut Receiver<Message>, stream: TcpStream) {
+    async fn tcp_handler(tx: &Sender<Message>, rx: &mut Receiver<Message>, stream: TcpStream) {
         let mut buffer = String::new();
         let mut stream = BufStream::new(stream);
 
@@ -120,6 +120,47 @@ impl Server {
                     }
                 }
             }
+        }
+    }
+
+    pub async fn process(&mut self, project: Arc<Mutex<Project>>) {
+        let mut transaction: Project = Project::new();
+        loop {
+            let Some(message) = self.rx.recv().await else {
+                break;
+            };
+
+            match message {
+                Message::PushType { id, data } => {
+                    transaction.types.insert(id, data);
+                }
+                Message::PushGlobal { id, data } => {
+                    transaction.globals.insert(id, data);
+                }
+                Message::PushFunction { id, data } => {
+                    transaction.functions.insert(id, data);
+                }
+                Message::DeleteType { id } => {
+                    transaction.types.remove(&id);
+                }
+                Message::DeleteGlobal { id } => {
+                    transaction.globals.remove(&id);
+                }
+                Message::DeleteFunction { id } => {
+                    transaction.functions.remove(&id);
+                }
+                Message::EndTransaction => {
+                    let mut project = project.lock().await;
+
+
+                    // validate objects
+                    project.functions.extend(transaction.functions);
+                    project.globals.extend(transaction.globals);
+                    project.types.extend(transaction.types);
+
+                    transaction = Project::new();
+                }
+            };
         }
     }
 }

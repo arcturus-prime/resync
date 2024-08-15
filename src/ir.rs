@@ -18,13 +18,13 @@ pub struct Type {
 pub struct Function {
     pub location: usize,
     pub arguments: Vec<Argument>,
-    pub return_type: String,
+    pub return_type: usize,
 }
 
 #[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Global {
     pub location: usize,
-    pub global_type: String,
+    pub global_type: usize,
 }
 
 #[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
@@ -36,14 +36,14 @@ pub struct EnumValue {
 #[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: String,
+    pub arg_type: usize,
 }
 
 #[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: String,
+    pub field_type: usize,
 }
 
 #[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
@@ -51,12 +51,12 @@ pub struct StructField {
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
     Pointer {
-        to_type: String,
+        to_type: usize,
         depth: usize,
     },
     Function {
-        arg_types: Vec<String>,
-        return_type: String,
+        arg_types: Vec<usize>,
+        return_type: usize,
     },
     Struct {
         fields: Vec<StructField>,
@@ -65,7 +65,7 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: String,
+        item_type: usize,
     },
     None,
 }
@@ -118,7 +118,7 @@ impl Project {
         let mut project_data = Vec::<u8>::new();
 
         project_file.read_to_end(&mut project_data)?;
-        let project = bitcode::decode(project_data.as_slice())?,
+        let project = bitcode::decode(project_data.as_slice())?;
 
         Ok(project)
     }
