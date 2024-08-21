@@ -23,7 +23,7 @@ impl<'a> CommandParser<'a> {
     pub fn new(string: &'a str) -> Self {
         Self { string }
     }
-
+    #[allow(dead_code)]
     pub fn peek(&self, num: usize) -> &str {
         self.string.split_at(num).0
     }
