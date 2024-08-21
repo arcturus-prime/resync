@@ -2,51 +2,50 @@ use std::{
     collections::HashMap, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path
 };
 
-use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+use crate::error::Error;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Type {
     pub size: usize,
     pub alignment: usize,
-
-    #[serde(default)]
     pub info: TypeInfo,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Function {
     pub location: usize,
     pub arguments: Vec<Argument>,
-    pub return_type: usize,
+    pub return_type: String,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Global {
     pub location: usize,
-    pub global_type: usize,
+    pub global_type: String,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: usize,
+    pub arg_type: String,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: usize,
+    pub field_type: String,
 }
 
-#[derive(Debug, Encode, Decode, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
@@ -55,8 +54,8 @@ pub enum TypeInfo {
         depth: usize,
     },
     Function {
-        arg_types: Vec<usize>,
-        return_type: usize,
+        arg_types: Vec<String>,
+        return_type: String,
     },
     Struct {
         fields: Vec<StructField>,
@@ -65,43 +64,18 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: usize,
+        item_type: String,
     },
-    None,
+    Int,
+    Uint,
+    Float,
 }
 
-impl Default for TypeInfo {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Io(std::io::Error),
-    Bitcode(bitcode::Error),
-    TypeInvalid(String),
-    PathInvalid,
-}
-
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-
-impl From<bitcode::Error> for Error {
-    fn from(value: bitcode::Error) -> Self {
-        Self::Bitcode(value)
-    }
-}
-
-
-#[derive(Debug, Encode, Decode)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Project {
-    pub types: HashMap<usize, Type>,
-    pub functions: HashMap<usize, Function>,
-    pub globals: HashMap<usize, Global>,
+    pub types: HashMap<String, Type>,
+    pub functions: HashMap<String, Function>,
+    pub globals: HashMap<String, Global>,
 }
 
 impl Project {
@@ -118,7 +92,7 @@ impl Project {
         let mut project_data = Vec::<u8>::new();
 
         project_file.read_to_end(&mut project_data)?;
-        let project = bitcode::decode(project_data.as_slice())?;
+        let project = serde_json::from_slice(project_data.as_slice())?;
 
         Ok(project)
     }
@@ -133,7 +107,7 @@ impl Project {
             transaction = OpenOptions::new().write(true).open(path)?;
         }
 
-        let data = bitcode::encode(self);
+        let data = serde_json::to_vec_pretty(self)?;
         transaction.write(&data)?;
 
         Ok(())
