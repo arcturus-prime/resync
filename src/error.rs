@@ -1,4 +1,4 @@
-use std::fmt::{Display, Pointer};
+use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum Error {

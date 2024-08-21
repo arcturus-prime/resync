@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     hash::Hash,
     io,
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 
 use crate::error::Error;
@@ -16,44 +16,54 @@ pub enum Command {
 }
 
 pub struct CommandParser<'a> {
-    string: &'a [u8],
+    string: &'a str,
 }
 
 impl<'a> CommandParser<'a> {
-    pub fn new(string: &'a [u8]) -> Self {
+    pub fn new(string: &'a str) -> Self {
         Self { string }
     }
 
-    pub fn command(&mut self) -> Result<Command, Error> {
+    pub fn peek(&self, num: usize) -> &str {
+        self.string.split_at(num).0
+    }
 
+    pub fn consume(&mut self, num: usize) -> &str {
+        let pair = self.string.split_at(num);
         self.string = pair.1;
 
-        match pair.0 {
+        pair.0
+    }
+
+    pub fn command(&mut self) -> Result<Command, Error> {
+        let nextgap = self.string.chars().position(|c| c == ' ' || c == '\n' || c == '\r').unwrap_or(self.string.len());
+
+        match self.consume(nextgap) {
             "open" => Ok(Command::Open),
             "merge" => Ok(Command::Merge),
             "new" => Ok(Command::New),
             "save" => Ok(Command::Save),
-            _ => Err(Error::Binal(String::from("Invalid command found"))),
+            _ => Err(Error::Binal(String::from("Invalid command"))),
         }
     }
 
     pub fn path(&mut self) -> Result<PathBuf, Error> {
-        let lead = self.string[0];
+        let lead = self.consume(1);
 
-        let pair = if lead == b'\"' {
-            match self.string[1..].split_once("\"") {
+        let pair = if lead == "\"" {
+            match self.string.split_once("\"") {
                 Some(p) => p,
                 None => return Err(Error::Binal(String::from("Could not find matching \""))),
             }
-        } else if lead == b'\'' {
-            match self.string[1..].split_once("\'") {
+        } else if lead == "\'" {
+            match self.string.split_once("\'") {
                 Some(p) => p,
                 None => return Err(Error::Binal(String::from("Could not find matching \'"))),
             }
         } else {
             match self.string.split_once(" ") {
                 Some(p) => p,
-                None => ("", self.string),
+                None => (self.string, ""),
             }
         };
 
@@ -63,11 +73,11 @@ impl<'a> CommandParser<'a> {
     }
 
     pub fn option(&mut self) -> Result<bool, Error> {
-        if self.string[0..=1].to_lowercase() == "y" {
-            self.string = &self.string[1..];
+        let option = self.consume(1);
+        
+        if option.to_lowercase() == "y" {
             return Ok(true);
-        } else if self.string[0..=1].to_lowercase() == "n" {
-            self.string = &self.string[1..];
+        } else if option.to_lowercase() == "n" {
             return Ok(false);
         }
 
@@ -88,35 +98,54 @@ impl App {
         let mut buffer = String::new();
 
         loop {
+            buffer.clear();
+            
             if let Err(e) = io::stdin().read_line(&mut buffer) {
-                println!("Error when reading command: {}", e);
+                println!("Error when reading input: {}", e);
             }
 
-            let mut parser = CommandParser::new(buffer.as_bytes());
+            let mut parser = CommandParser::new(&buffer.trim());
             let command = match parser.command() {
                 Ok(c) => c,
                 Err(e) => {
                     println!("Error occured trying to get command: {}", e);
-                    return;
+                    continue;
                 }
             };
 
             match command {
                 Command::Merge => {
-                    let path = Self::prompt_path();
+                    let Ok(path) = parser.path() else {
+                        continue
+                    };
 
-                    if let Err(e) = self.merge(&path) {
-                        println!("Error occured while merging projects {}", e)
-                    }
+                    let Some(dest_project) = &mut self.project else {
+                        println!("No active project");
+                        continue
+                    };
+
+                    let mut source_project = match Project::open(&path) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            println!("Error opening project: {}", e);
+                            continue
+                        },
+                    }; 
+                    
+                    Self::prompt_merge(&mut dest_project.functions, &mut source_project.functions);
+                    Self::prompt_merge(&mut dest_project.globals, &mut source_project.globals);
+                    Self::prompt_merge(&mut dest_project.types, &mut source_project.types);
                 }
                 Command::Open => {
-                    let path = Self::prompt_path();
+                    let Ok(path) = parser.path() else {
+                        continue
+                    };
 
                     self.project = Some(match Project::open(&path) {
                         Ok(p) => p,
                         Err(e) => {
                             println!("Error opening project: {}", e);
-                            return;
+                            continue;
                         }
                     })
                 }
@@ -124,37 +153,22 @@ impl App {
                     self.project = Some(Project::new());
                 }
                 Command::Save => {
-                    let path = Self::prompt_path();
-
-                    let Some(project) = &self.project else {
-                        println!("No active project");
-                        return
+                    let Ok(path) = parser.path() else {
+                        continue
                     };
 
-                    project.save(&path);
+                    println!("{:?}", path);
+                    
+                    let Some(project) = &self.project else {
+                        println!("No active project");
+                        continue
+                    };
+
+                    if let Err(e) = project.save(&path) {
+                        println!("Error saving project: {}", e)
+                    }
                 }
             }
-        }
-    }
-
-    fn prompt_path() -> PathBuf {
-        loop {
-            let mut buffer = String::new();
-            if let Err(e) = io::stdin().read_line(&mut buffer) {
-                println!("Error when reading path: {}", e);
-                continue;
-            }
-
-            let mut parser = CommandParser::new(buffer.as_bytes());
-            let opt = match parser.path() {
-                Ok(opt) => opt,
-                Err(e) => {
-                    println!("Error parsing path: {}", e);
-                    continue;
-                }
-            };
-
-            return opt
         }
     }
 
@@ -164,11 +178,11 @@ impl App {
 
             let mut buffer = String::new();
             if let Err(e) = io::stdin().read_line(&mut buffer) {
-                println!("Error when reading option: {}", e);
+                println!("Error when reading input: {}", e);
                 continue;
             }
 
-            let mut parser = CommandParser::new(buffer.as_bytes());
+            let mut parser = CommandParser::new(&buffer);
             let opt = match parser.option() {
                 Ok(opt) => opt,
                 Err(e) => {
@@ -200,19 +214,5 @@ impl App {
         for key in to_move {
             map1.insert(key.clone(), map2.remove(&key).unwrap());
         }
-    }
-
-    fn merge(&mut self, path: &Path) -> Result<(), Error> {
-        let mut source_project = Project::open(path)?;
-
-        let Some(dest_project) = &mut self.project else {
-            return Err(Error::Binal(String::from("No active project")));
-        };
-
-        Self::prompt_merge(&mut dest_project.functions, &mut source_project.functions);
-        Self::prompt_merge(&mut dest_project.globals, &mut source_project.globals);
-        Self::prompt_merge(&mut dest_project.types, &mut source_project.types);
-
-        Ok(())
     }
 }
