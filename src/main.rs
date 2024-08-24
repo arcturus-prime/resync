@@ -1,6 +1,6 @@
 mod ir;
 mod error;
-mod component;
+mod app;
 
 use std::{collections::HashMap, hash::Hash, io};
 

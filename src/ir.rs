@@ -78,6 +78,12 @@ pub struct Project {
     pub globals: HashMap<String, Global>,
 }
 
+pub struct ProjectRef {
+    pub types: Vec<String>,
+    pub globals: Vec<String>,
+    pub functions: Vec<String>,
+}
+
 impl Project {
     pub fn new() -> Self {
         Self {
@@ -111,5 +117,15 @@ impl Project {
         transaction.write(&data)?;
 
         Ok(())
+    }
+}
+
+impl ProjectRef {
+    pub fn new() -> Self {
+        Self {
+            types: Vec::new(),
+            functions: Vec::new(),
+            globals: Vec::new(),
+        }
     }
 }

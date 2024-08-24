@@ -4,7 +4,6 @@ use std::fmt::Display;
 pub enum Error {
     Io(std::io::Error),
     Serde(serde_json::Error),
-    Binal(String)
 }
 
 impl From<std::io::Error> for Error {
@@ -24,7 +23,6 @@ impl<'a> Display for Error {
         match self {
             Error::Io(e) => e.fmt(f),
             Error::Serde(e) => e.fmt(f),
-            Error::Binal(s) => f.write_str(s)
         }
     }
 }
