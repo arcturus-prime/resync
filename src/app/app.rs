@@ -1,9 +1,8 @@
 use crate::ir::Project;
 
-use super::merge::MergeConflictMenu;
+use super::merge::MergeMenu;
 
 pub struct App {
     pub project: Project,
-    pub merge_menu: MergeConflictMenu
+    pub merge_menu: MergeMenu
 }
- 

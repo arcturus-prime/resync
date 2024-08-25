@@ -5,7 +5,10 @@ use ratatui::{
     widgets::{List, ListItem},
 };
 
-use crate::{ir::{Project, ProjectRef}, app::Renderable};
+use crate::{
+    app::Renderable,
+    ir::{Project, ProjectRef},
+};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -15,13 +18,18 @@ pub enum Tab {
     Globals,
 }
 
-pub struct MergeConflictMenu {
-    pub conflicts: ProjectRef,
-    pub cursor: usize,
-    pub tab: Tab,
+pub enum Direction {
+    Up,
+    Down,
 }
 
-impl Renderable for MergeConflictMenu {
+pub struct MergeMenu {
+    conflicts: ProjectRef,
+    cursor: usize,
+    tab: Tab,
+}
+
+impl Renderable for MergeMenu {
     fn render(&self, frame: &mut ratatui::Frame, area: Rect) {
         let get_list = |vec: &Vec<String>| -> List {
             let items: Vec<ListItem> = vec
@@ -49,48 +57,63 @@ impl Renderable for MergeConflictMenu {
     }
 }
 
-impl MergeConflictMenu {
-    pub fn create_from_project_diff(source: &Project, dest: &mut Project) -> Self {
-        let mut project_ref = ProjectRef::new();
+impl MergeMenu {
+    pub fn new() -> Self {
+        Self {
+            conflicts: ProjectRef::new(),
+            cursor: 0,
+            tab: Tab::Types,
+        }
+    }
 
+    pub fn apply_project_diff(&mut self, source: &Project, dest: &Project) {
         for pair in source.types.iter() {
             if dest.types.contains_key(pair.0) {
-                project_ref.types.push(pair.0.clone());
+                self.conflicts.types.push(pair.0.clone());
             }
         }
-             
+
         for pair in source.globals.iter() {
             if dest.globals.contains_key(pair.0) {
-                project_ref.globals.push(pair.0.clone());
+                self.conflicts.globals.push(pair.0.clone());
             }
         }
 
         for pair in source.functions.iter() {
             if dest.functions.contains_key(pair.0) {
-                project_ref.functions.push(pair.0.clone());
+                self.conflicts.functions.push(pair.0.clone());
             }
-        }
-
-        Self {
-            cursor: 0,
-            tab: Tab::Types,
-            conflicts: project_ref,
         }
     }
 
-    pub fn update_cursor(&mut self, index: usize) -> Result<(), ()> {
-        let is_in_bounds = match self.tab {
-            Tab::Types => index < self.conflicts.types.len(),
-            Tab::Functions => index < self.conflicts.functions.len(),
-            Tab::Globals => index < self.conflicts.globals.len(),
+    pub fn update_cursor(&mut self, direction: Direction) {
+        let length = match self.tab {
+            Tab::Types => self.conflicts.types.len(),
+            Tab::Functions => self.conflicts.functions.len(),
+            Tab::Globals => self.conflicts.globals.len(),
         };
 
-        if !is_in_bounds {
-            return Err(())
+        self.cursor = match direction {
+            Direction::Down => self.cursor + 1 % length,
+            Direction::Up => {
+                if self.cursor == 0 {
+                    length - 1
+                } else {
+                    self.cursor - 1
+                }
+            }
         }
+    }
 
-        self.cursor = index;
-        
-        Ok(())
+    pub fn update_tab(&mut self, tab: Tab) {
+
+    }
+
+    pub fn get_current(&self) -> &String {
+        match self.tab {
+            Tab::Types => &self.conflicts.types[self.cursor],
+            Tab::Functions => &self.conflicts.functions[self.cursor],
+            Tab::Globals => &self.conflicts.globals[self.cursor],
+        }
     }
 }
