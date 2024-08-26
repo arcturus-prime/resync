@@ -1,12 +1,12 @@
 use ratatui::{
-    crossterm::style::Color,
+    crossterm::{event::{Event, KeyCode, KeyEventKind}, style::Color},
     layout::Rect,
     style::Stylize,
     widgets::{List, ListItem},
     Frame,
 };
 
-use crate::{app::Renderable, ir::Project};
+use crate::{app::Component, ir::Project};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -27,7 +27,9 @@ pub struct ProjectMenu {
     tab: Tab,
 }
 
-impl Renderable for ProjectMenu {
+impl Component for ProjectMenu {
+    type Action = Event;
+
     fn render(&self, frame: &mut ratatui::Frame, area: Rect) {
         let vec = &self.items[self.tab as usize];
 
@@ -36,7 +38,7 @@ impl Renderable for ProjectMenu {
 
         let items: Vec<ListItem> = vec[start..end]
             .iter()
-            .zip(0..)
+            .zip(start..)
             .map(|pair| {
                 if pair.1 == self.cursor {
                     ListItem::new(pair.0.clone()).bg(Color::Blue)
@@ -47,6 +49,30 @@ impl Renderable for ProjectMenu {
             .collect();
 
         frame.render_widget(List::new(items), area);
+    }
+        
+    fn update(&mut self, action: Self::Action) {
+        match action {
+            Event::FocusGained => todo!(),
+            Event::FocusLost => todo!(),
+            Event::Key(k) => {
+                if k.kind == KeyEventKind::Release {
+                    return
+                }
+
+                match k.code {
+                    KeyCode::Up => self.update_cursor(Direction::Up),
+                    KeyCode::Down => self.update_cursor(Direction::Down),
+                    KeyCode::Char('1') => self.update_tab(Tab::Types),
+                    KeyCode::Char('2') => self.update_tab(Tab::Functions),
+                    KeyCode::Char('3') => self.update_tab(Tab::Globals),
+                    _ => {}
+                }
+            },
+            Event::Mouse(_) => todo!(),
+            Event::Paste(_) => todo!(),
+            Event::Resize(_, _) => todo!(),
+        }
     }
 }
 
@@ -59,7 +85,7 @@ impl ProjectMenu {
         }
     }
 
-    pub fn update_cursor(&mut self, direction: Direction) {
+    fn update_cursor(&mut self, direction: Direction) {
         let length = self.items[self.tab as usize].len();
 
         self.cursor = match direction {
@@ -74,7 +100,7 @@ impl ProjectMenu {
         }
     }
 
-    pub fn update_tab(&mut self, tab: Tab) {
+    fn update_tab(&mut self, tab: Tab) {
         let length = self.items[self.tab as usize].len();
     }
 

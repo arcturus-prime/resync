@@ -4,66 +4,50 @@ use ratatui::{crossterm::event::Event, layout::Rect, Frame};
 
 use crate::{error::Error, ir::Project, menus::ProjectMenu};
 
-pub trait Renderable {
-    fn render(&self, frame: &mut Frame, area: Rect);
-}
+pub trait Component {
+    type Action;
 
-pub enum Menu {
-    View,
-    Merge,
+    fn update(&mut self, action: Self::Action);
+    fn render(&self, frame: &mut Frame, area: Rect);
 }
 
 pub struct App {
     project: Project,
-    project_path: PathBuf,
-    current_menu: Menu,
-
-    view_menu: ProjectMenu,
-    merge_menu: ProjectMenu,
-
+    project_path: Option<PathBuf>,
+    
+    current: usize,
+    menus: Vec<Box<dyn Component<Action = Event>>>,
     pub exit: bool,
 }
 
-impl Renderable for App {
+impl Component for App {
+    type Action = Event;
+    
     fn render(&self, frame: &mut Frame, area: Rect) {
-        match self.current_menu {
-            Menu::View => self.view_menu.render(frame, area),
-            Menu::Merge => self.merge_menu.render(frame, area),
-        }
+        self.menus[self.current].render(frame, area)
+    }
+
+    fn update(&mut self, action: Self::Action) {
+        self.menus[self.current].update(action)
     }
 }
 
 impl App {
-    pub fn create(path: PathBuf) -> Result<Self, Error> {
-        let project = if path.exists() {
-            Project::open(&path)
-        } else {
-            Ok(Project::new())
-        }?;
-
-        let mut view_menu = ProjectMenu::new();
-        view_menu.apply_project(&project);
-
-        Ok(Self {
-            project,
-            project_path: path,
-            current_menu: Menu::View,
-
-            view_menu,
-            merge_menu: ProjectMenu::new(),
-            
+    pub fn new() -> Self {
+        Self {
+            project: Project::new(),
+            project_path: None,
+            current: 0,
+            menus: vec![],
             exit: false,
-        })
+        }
     }
 
-    pub fn update(&mut self, event: Event) {
-        match event {
-            Event::FocusGained => todo!(),
-            Event::FocusLost => todo!(),
-            Event::Key(k) => {},
-            Event::Mouse(_) => todo!(),
-            Event::Paste(_) => todo!(),
-            Event::Resize(_, _) => {},
-        }
+    pub fn init_with_project(&mut self, path: PathBuf) -> Result<(), Error> {
+        self.project = Project::open(&path)?;
+        self.project_path = Some(path);
+
+        self.menus.push(Box::new(ProjectMenu::new()));
+        Ok(())
     }
 }
