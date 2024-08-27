@@ -16,17 +16,13 @@ impl App {
 
     pub fn update(&mut self, action: Event) {
         if let Event::Key(k) = action {
-            if k.modifiers.contains(KeyModifiers::CONTROL) {
-                if k.kind == KeyEventKind::Release {
-                    return
-                }
-                
-                match k.code {
-                    KeyCode::Char('p') => self.new_menu(Box::new(ProjectMenu::new())),
-                    _ => {}
-                }
-            } else {
-                self.menus[self.current].update(action)
+            if k.kind == KeyEventKind::Release {
+                return
+            }
+            
+            match (k.modifiers, k.code) {
+                (KeyModifiers::CONTROL, KeyCode::Char('p')) => self.new_menu(Box::new(ProjectMenu::new())),
+                _ => self.menus[self.current].update(action)
             }
         }
     }
