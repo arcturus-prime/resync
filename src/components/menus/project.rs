@@ -1,13 +1,16 @@
 use ratatui::{
-    crossterm::{event::{Event, KeyCode, KeyEventKind}, style::Color},
-    layout::Rect,
+    crossterm::{
+        event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
+        style::Color,
+    },
+    layout::{Constraint, Layout, Offset, Rect},
     style::Stylize,
-    widgets::{List, ListItem},
+    widgets::{block::Title, Block, List, ListItem},
     Frame,
 };
 
-use crate::ir::Project;
 use super::super::Component;
+use crate::{components::path::PathPrompt, ir::Project};
 
 #[repr(u8)]
 #[derive(Clone, Copy)]
@@ -23,15 +26,16 @@ pub enum Direction {
 }
 
 pub struct ProjectMenu {
-    items: [Vec<String>; 3],
-    cursor: usize,
-    tab: Tab,
+    pub items: [Vec<String>; 3],
+    pub cursor: usize,
+    pub tab: Tab,
+    pub path_prompt: Option<PathPrompt>,
 }
 
 impl Component for ProjectMenu {
     type Action = Event;
 
-    fn render(&self, frame: &mut ratatui::Frame, area: Rect) {
+    fn render(&self, frame: &mut Frame, area: Rect) {
         let vec = &self.items[self.tab as usize];
 
         let start = self.cursor - self.cursor % 20;
@@ -49,30 +53,40 @@ impl Component for ProjectMenu {
             })
             .collect();
 
-        frame.render_widget(List::new(items), area);
+        let block = Block::new();
+        let layout = Layout::new(ratatui::layout::Direction::Vertical, Constraint::from_percentages([10, 100])).split(area);
+
+        if let Some(prompt) = &self.path_prompt {
+            frame.render_widget(block.title("Open an existing project"), layout[0]);
+            prompt.render(frame, layout[1]);
+        } else {
+            frame.render_widget(block.title("Project"), layout[0]);
+            frame.render_widget(List::new(items), layout[1]);
+        }
     }
-        
+
     fn update(&mut self, action: Self::Action) {
         match action {
-            Event::FocusGained => {},
+            Event::FocusGained => {}
             Event::FocusLost => todo!(),
             Event::Key(k) => {
                 if k.kind == KeyEventKind::Release {
-                    return
+                    return;
                 }
 
-                match k.code {
-                    KeyCode::Up => self.update_cursor(Direction::Up),
-                    KeyCode::Down => self.update_cursor(Direction::Down),
-                    KeyCode::Char('1') => self.update_tab(Tab::Types),
-                    KeyCode::Char('2') => self.update_tab(Tab::Functions),
-                    KeyCode::Char('3') => self.update_tab(Tab::Globals),
-                    _ => {}
+                if let Some(prompt) = &mut self.path_prompt {
+                    if k.code == KeyCode::Esc {
+                        self.path_prompt = None;
+                    } else {
+                        prompt.update(k.code)
+                    }
+                } else {
+                    self.handle_key(k)
                 }
-            },
+            }
             Event::Mouse(_) => todo!(),
             Event::Paste(_) => todo!(),
-            Event::Resize(_, _) => {},
+            Event::Resize(_, _) => {}
         }
     }
 }
@@ -83,6 +97,21 @@ impl ProjectMenu {
             items: [const { Vec::new() }; 3],
             cursor: 0,
             tab: Tab::Functions,
+            path_prompt: None,
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) {
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Up) => self.update_cursor(Direction::Up),
+            (KeyModifiers::NONE, KeyCode::Down) => self.update_cursor(Direction::Down),
+            (KeyModifiers::NONE, KeyCode::Char('1')) => self.update_tab(Tab::Types),
+            (KeyModifiers::NONE, KeyCode::Char('2')) => self.update_tab(Tab::Functions),
+            (KeyModifiers::NONE, KeyCode::Char('3')) => self.update_tab(Tab::Globals),
+            (KeyModifiers::NONE, KeyCode::Char('o')) => {
+                self.path_prompt = Some(PathPrompt::new())
+            }
+            _ => {}
         }
     }
 
@@ -90,7 +119,7 @@ impl ProjectMenu {
         let length = self.items[self.tab as usize].len();
 
         if length == 0 {
-            return
+            return;
         }
 
         self.cursor = match direction {

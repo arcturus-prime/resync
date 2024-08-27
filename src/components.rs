@@ -1,7 +1,7 @@
 use ratatui::{layout::Rect, Frame};
 
-pub mod path;
 pub mod menus;
+pub mod path;
 
 pub trait Component {
     type Action;

@@ -11,6 +11,10 @@ pub struct App {
 
 impl App {    
     pub fn render(&self, frame: &mut Frame, area: Rect) {
+        if self.menus.len() == 0 {
+            return
+        }
+        
         self.menus[self.current].render(frame, area)
     }
 
