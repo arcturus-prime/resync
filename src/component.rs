@@ -1,7 +1,8 @@
 use ratatui::{layout::Rect, Frame};
 
-pub mod menus;
-pub mod path;
+pub mod project;
+pub mod editable_text;
+pub mod list;
 
 pub trait Component {
     type Action;

@@ -1,6 +1,6 @@
 mod ir;
 mod error;
-mod components;
+mod component;
 mod app;
 
 use std::{io::{self, stdout}, time::Duration};

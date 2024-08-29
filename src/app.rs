@@ -1,6 +1,6 @@
 use ratatui::{crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers}, layout::Rect, Frame};
 
-use crate::components::{menus::project::ProjectMenu, Component};
+use crate::component::{project::ProjectView, Component};
 
 pub struct App {
     current: usize,
@@ -25,13 +25,14 @@ impl App {
             }
             
             match (k.modifiers, k.code) {
-                (KeyModifiers::CONTROL, KeyCode::Char('p')) => self.new_menu(Box::new(ProjectMenu::new())),
+                (KeyModifiers::CONTROL, KeyCode::Char('p')) => self.new_menu(Box::new(ProjectView::new())),
+                (KeyModifiers::CONTROL, KeyCode::Char('c')) => self.exit = true,
                 _ => self.menus[self.current].update(action)
             }
         }
     }
 
-    fn new_menu(&mut self, menu: Box<dyn Component<Action = Event>>) {
+    pub fn new_menu(&mut self, menu: Box<dyn Component<Action = Event>>) {
         self.menus.push(menu);
         self.current = self.menus.len() - 1;
     }
