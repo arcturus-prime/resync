@@ -2,6 +2,7 @@ mod ir;
 mod error;
 mod component;
 mod app;
+mod context;
 
 use std::{io::{self, stdout}, time::Duration};
 

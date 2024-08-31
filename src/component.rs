@@ -3,6 +3,7 @@ use ratatui::{layout::Rect, Frame};
 pub mod project;
 pub mod editable_text;
 pub mod list;
+pub mod object_display;
 
 pub trait Component {
     type Action;

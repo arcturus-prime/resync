@@ -5,15 +5,8 @@ use ratatui::{
 };
 
 use super::{list::SelectableList, editable_text::EditableText, Component};
-use crate::ir::Project;
+use crate::ir::{ObjectKind, Project};
 
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum Tab {
-    Types = 0,
-    Functions,
-    Globals,
-}
 pub enum Focus {
     List,
     Inspect,
@@ -22,7 +15,7 @@ pub enum Focus {
 
 pub struct ProjectView<'a> {
     items: [SelectableList<'a, String>; 3],
-    tab: Tab,
+    tab: ObjectKind,
     focus: Focus,
 }
 
@@ -30,15 +23,13 @@ impl<'a> Component for ProjectView<'a> {
     type Action = Event;
 
     fn render(&self, frame: &mut Frame, area: Rect) {
-        let list = &self.items[self.tab as usize];
-
         let layout = Layout::new(
             ratatui::layout::Direction::Horizontal,
             Constraint::from_percentages([50, 50]),
         )
         .split(area);
 
-        list.render(frame, layout[0]);
+        self.items[self.tab as usize].render(frame, layout[0]);
     }
 
     fn update(&mut self, action: Self::Action) {
@@ -63,7 +54,7 @@ impl<'a> ProjectView<'a> {
     pub fn new() -> Self {
         Self {
             items: core::array::from_fn(|_| SelectableList::new()),
-            tab: Tab::Functions,
+            tab: ObjectKind::Functions,
             focus: Focus::List,
         }
     }
@@ -71,9 +62,9 @@ impl<'a> ProjectView<'a> {
     fn handle_key(&mut self, key: KeyEvent) {
         match self.focus {
             Focus::List => match (key.modifiers, key.code) {
-                (KeyModifiers::NONE, KeyCode::Char('1')) => self.update_tab(Tab::Types),
-                (KeyModifiers::NONE, KeyCode::Char('2')) => self.update_tab(Tab::Functions),
-                (KeyModifiers::NONE, KeyCode::Char('3')) => self.update_tab(Tab::Globals),
+                (KeyModifiers::NONE, KeyCode::Char('1')) => self.update_tab(ObjectKind::Types),
+                (KeyModifiers::NONE, KeyCode::Char('2')) => self.update_tab(ObjectKind::Functions),
+                (KeyModifiers::NONE, KeyCode::Char('3')) => self.update_tab(ObjectKind::Globals),
                 _ => self.items[self.tab as usize].update(key)
             },
             Focus::Inspect => {},
@@ -83,41 +74,21 @@ impl<'a> ProjectView<'a> {
         }
     }
 
-    fn update_tab(&mut self, tab: Tab) {
+    fn update_tab(&mut self, tab: ObjectKind) {
         let length = self.items[self.tab as usize].len();
-    }
-
-    pub fn apply_project_diff(&mut self, source: &Project, dest: &Project) {
-        for pair in source.types.iter() {
-            if dest.types.contains_key(pair.0) {
-                self.items[Tab::Types as usize].push(pair.0.clone());
-            }
-        }
-
-        for pair in source.globals.iter() {
-            if dest.globals.contains_key(pair.0) {
-                self.items[Tab::Globals as usize].push(pair.0.clone());
-            }
-        }
-
-        for pair in source.functions.iter() {
-            if dest.functions.contains_key(pair.0) {
-                self.items[Tab::Functions as usize].push(pair.0.clone());
-            }
-        }
     }
 
     pub fn apply_project(&mut self, source: &Project) {
         for pair in source.types.iter() {
-            self.items[Tab::Types as usize].push(pair.0.clone());
+            self.items[ObjectKind::Types as usize].push(pair.0.clone());
         }
 
         for pair in source.globals.iter() {
-            self.items[Tab::Globals as usize].push(pair.0.clone());
+            self.items[ObjectKind::Globals as usize].push(pair.0.clone());
         }
 
         for pair in source.functions.iter() {
-            self.items[Tab::Functions as usize].push(pair.0.clone());
+            self.items[ObjectKind::Functions as usize].push(pair.0.clone());
         }
     }
 }
