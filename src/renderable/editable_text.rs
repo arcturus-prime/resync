@@ -2,17 +2,23 @@ use std::fmt::Display;
 
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind}, style::Color}, style::Style, text::Text, widgets::Block};
 
-use super::Component;
+use super::Renderable;
 
 pub struct EditableText {
-    buffer: String,
+    pub buffer: String,
     index: usize,
 }
 
-impl Component for EditableText {
-    type Action = KeyEvent;
+impl Renderable for EditableText {
+    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
+        let block = Text::styled(self.buffer.clone(), Style::default().bg(Color::AnsiValue(235).into()));
 
-    fn update(&mut self, action: Self::Action) {
+        frame.render_widget(block, area);
+    }
+}
+
+impl EditableText {
+    pub fn update(&mut self, action: KeyEvent) {
         match action.code {
             KeyCode::Backspace => self.backspace(),
             KeyCode::Left => self.move_index_left(),
@@ -24,15 +30,7 @@ impl Component for EditableText {
             _ => {} 
         }
     }
-
-    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-        let block = Text::styled(self.buffer.clone(), Style::default().bg(Color::AnsiValue(235).into()));
-
-        frame.render_widget(block, area);
-    }
-}
-
-impl EditableText {
+    
     fn move_index_left(&mut self) {
         if self.index == 0 {
             return

@@ -1,10 +1,12 @@
+use std::sync::{Arc, Mutex};
+
 use ratatui::{
     crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout, Rect},
     Frame,
 };
 
-use super::{list::SelectableList, editable_text::EditableText, Component};
+use super::{editable_text::{self, EditableText}, list::SelectableList, object_display::ObjectDisplay, Renderable};
 use crate::ir::{ObjectKind, Project};
 
 pub enum Focus {
@@ -13,15 +15,17 @@ pub enum Focus {
     Open,
 }
 
-pub struct ProjectView<'a> {
+pub struct ProjectMenu<'a> {
     items: [SelectableList<'a, String>; 3],
     tab: ObjectKind,
+
     focus: Focus,
+
+    inspect: ObjectDisplay,
+    project: Arc<Mutex<Project>>,
 }
 
-impl<'a> Component for ProjectView<'a> {
-    type Action = Event;
-
+impl<'a> Renderable for ProjectMenu<'a> {
     fn render(&self, frame: &mut Frame, area: Rect) {
         let layout = Layout::new(
             ratatui::layout::Direction::Horizontal,
@@ -31,8 +35,35 @@ impl<'a> Component for ProjectView<'a> {
 
         self.items[self.tab as usize].render(frame, layout[0]);
     }
+}
 
-    fn update(&mut self, action: Self::Action) {
+impl<'a> ProjectMenu<'a> {
+    pub fn new(project: Arc<Mutex<Project>>) -> Self {
+        Self {
+            items: core::array::from_fn(|_| SelectableList::new()),
+            tab: ObjectKind::Functions,
+            focus: Focus::List,
+            project: project.clone(),
+            inspect: ObjectDisplay::new(project),
+        }
+    }
+
+    fn handle_key(&mut self, key: KeyEvent) {
+        match self.focus {
+            Focus::List => match (key.modifiers, key.code) {
+                (KeyModifiers::NONE, KeyCode::Char('1')) => self.update_tab(ObjectKind::Types),
+                (KeyModifiers::NONE, KeyCode::Char('2')) => self.update_tab(ObjectKind::Functions),
+                (KeyModifiers::NONE, KeyCode::Char('3')) => self.update_tab(ObjectKind::Globals),
+                _ => self.items[self.tab as usize].process_key(key)
+            },
+            Focus::Inspect => {},
+            Focus::Open => {
+
+            }
+        }
+    }
+    
+    pub fn update(&mut self, action: Event) {
         match action {
             Event::FocusGained => {}
             Event::FocusLost => todo!(),
@@ -46,31 +77,6 @@ impl<'a> Component for ProjectView<'a> {
             Event::Mouse(_) => todo!(),
             Event::Paste(_) => todo!(),
             Event::Resize(_, _) => {}
-        }
-    }
-}
-
-impl<'a> ProjectView<'a> {
-    pub fn new() -> Self {
-        Self {
-            items: core::array::from_fn(|_| SelectableList::new()),
-            tab: ObjectKind::Functions,
-            focus: Focus::List,
-        }
-    }
-
-    fn handle_key(&mut self, key: KeyEvent) {
-        match self.focus {
-            Focus::List => match (key.modifiers, key.code) {
-                (KeyModifiers::NONE, KeyCode::Char('1')) => self.update_tab(ObjectKind::Types),
-                (KeyModifiers::NONE, KeyCode::Char('2')) => self.update_tab(ObjectKind::Functions),
-                (KeyModifiers::NONE, KeyCode::Char('3')) => self.update_tab(ObjectKind::Globals),
-                _ => self.items[self.tab as usize].update(key)
-            },
-            Focus::Inspect => {},
-            Focus::Open => {
-
-            }
         }
     }
 

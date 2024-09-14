@@ -2,8 +2,7 @@ use std::{fmt::Display, marker::PhantomData};
 
 use ratatui::{crossterm::{event::{KeyCode, KeyEvent, KeyModifiers}, style::Color}, layout::Rect, style::Stylize, text::Text, widgets::{List, ListItem}, Frame};
 
-use super::Component;
-
+use super::Renderable;
 
 pub enum Direction {
     Up,
@@ -16,17 +15,7 @@ pub struct SelectableList<'a, T: Display + Clone + Into<Text<'a>>> {
     phantom: PhantomData<&'a ()>
 }
 
-impl<'a, T: Display + Clone + Into<Text<'a>>> Component for SelectableList<'a, T> {
-    type Action = KeyEvent;
-
-    fn update(&mut self, action: Self::Action) {
-        match (action.modifiers, action.code) {
-            (KeyModifiers::NONE, KeyCode::Up) => self.update_cursor(Direction::Up),
-            (KeyModifiers::NONE, KeyCode::Down) => self.update_cursor(Direction::Down),
-            _ => {},
-        }
-    }
-
+impl<'a, T: Display + Clone + Into<Text<'a>>> Renderable for SelectableList<'a, T> {
     fn render(&self, frame: &mut Frame, area: Rect) {
         let start = self.cursor - self.cursor % 20;
         let end = start + 20.min(self.items.len());
@@ -48,6 +37,14 @@ impl<'a, T: Display + Clone + Into<Text<'a>>> Component for SelectableList<'a, T
 }
 
 impl<'a, T: Display + Clone + Into<Text<'a>>> SelectableList<'a, T> {
+    pub fn process_key(&mut self, action: KeyEvent) {
+        match (action.modifiers, action.code) {
+            (KeyModifiers::NONE, KeyCode::Up) => self.update_cursor(Direction::Up),
+            (KeyModifiers::NONE, KeyCode::Down) => self.update_cursor(Direction::Down),
+            _ => {},
+        }
+    }
+    
     fn update_cursor(&mut self, direction: Direction) {
         let length = self.items.len();
 
