@@ -22,7 +22,7 @@ pub struct ProjectMenu<'a> {
     focus: Focus,
 
     inspect: ObjectDisplay,
-    project: Arc<Mutex<Project>>,
+    project: Project,
 }
 
 impl<'a> Renderable for ProjectMenu<'a> {
@@ -38,14 +38,28 @@ impl<'a> Renderable for ProjectMenu<'a> {
 }
 
 impl<'a> ProjectMenu<'a> {
-    pub fn new(project: Arc<Mutex<Project>>) -> Self {
-        Self {
+    pub fn new(project: Project) -> Self {
+        let mut s = Self {
             items: core::array::from_fn(|_| SelectableList::new()),
             tab: ObjectKind::Functions,
             focus: Focus::List,
-            project: project.clone(),
-            inspect: ObjectDisplay::new(project),
+            inspect: ObjectDisplay::new(),
+            project
+        };
+
+        for v in s.project.functions.keys() {
+            s.items[ObjectKind::Functions as usize].push(v.clone())
         }
+
+        for v in s.project.types.keys() {
+            s.items[ObjectKind::Types as usize].push(v.clone())
+        }
+
+        for v in s.project.globals.keys() {
+            s.items[ObjectKind::Globals as usize].push(v.clone())
+        }
+
+        s
     }
 
     fn handle_key(&mut self, key: KeyEvent) {
@@ -68,10 +82,6 @@ impl<'a> ProjectMenu<'a> {
             Event::FocusGained => {}
             Event::FocusLost => todo!(),
             Event::Key(k) => {
-                if k.kind == KeyEventKind::Release {
-                    return;
-                }
-
                 self.handle_key(k)
             }
             Event::Mouse(_) => todo!(),
@@ -81,7 +91,7 @@ impl<'a> ProjectMenu<'a> {
     }
 
     fn update_tab(&mut self, tab: ObjectKind) {
-        let length = self.items[self.tab as usize].len();
+        self.tab = tab
     }
 
     pub fn apply_project(&mut self, source: &Project) {

@@ -5,13 +5,13 @@ use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
 use super::Renderable;
 
 pub struct EditableText {
-    pub buffer: String,
+    buffer: String,
     index: usize,
 }
 
 impl Renderable for EditableText {
     fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-        let block = Text::styled(self.buffer.clone(), Style::default().bg(Color::AnsiValue(235).into()));
+        let block = Text::styled(&self.buffer, Style::default().bg(Color::AnsiValue(235).into()));
 
         frame.render_widget(block, area);
     }
@@ -57,6 +57,15 @@ impl EditableText {
         }
         
         self.buffer.remove(self.index);
+    }
+
+    pub fn get(&self) -> &str {
+        &self.buffer
+    }
+
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+        self.index = 0
     }
 
     pub fn new() -> Self {

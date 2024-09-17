@@ -17,8 +17,10 @@ pub struct SelectableList<'a, T: Display + Clone + Into<Text<'a>>> {
 
 impl<'a, T: Display + Clone + Into<Text<'a>>> Renderable for SelectableList<'a, T> {
     fn render(&self, frame: &mut Frame, area: Rect) {
-        let start = self.cursor - self.cursor % 20;
-        let end = start + 20.min(self.items.len());
+        let rows = area.rows().count();
+
+        let start = self.cursor - self.cursor % rows;
+        let end = start + rows.min(self.items.len());
 
         let items: Vec<ListItem> = self.items[start..end]
             .iter()
@@ -74,6 +76,10 @@ impl<'a, T: Display + Clone + Into<Text<'a>>> SelectableList<'a, T> {
 
     pub fn push(&mut self, item: T) {
         self.items.push(item)
+    }
+
+    pub fn append(&mut self, items: &mut Vec<T>) {
+        self.items.append(items);
     }
 
     pub fn get_current(&self) -> &T {

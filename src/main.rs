@@ -38,7 +38,7 @@ fn main() -> io::Result<()> {
             let event = event::read()?;
 
             if let Event::Key(k) = event {
-                if k.kind != KeyEventKind::Release {
+                if k.kind == KeyEventKind::Release {
                     continue
                 }
 
@@ -52,12 +52,12 @@ fn main() -> io::Result<()> {
 
                 if focus_open {
                     if k.code == KeyCode::Enter {
-                        let Ok(project) = Project::open(&PathBuf::from(&file_open.buffer)) else {
+                        let Ok(project) = Project::open(&PathBuf::from(file_open.get())) else {
                             continue
                         };
-                        file_open.buffer.clear();
+                        file_open.clear();
 
-                        menus.push(ProjectMenu::new(Arc::new(Mutex::new(project))));
+                        menus.push(ProjectMenu::new(project));
                         current = menus.len() - 1;
 
                         focus_open = false;

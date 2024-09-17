@@ -7,8 +7,6 @@ use super::Renderable;
 pub struct ObjectDisplay {
     key: String,
     kind: ObjectKind,
-
-    project: Arc<Mutex<Project>>,
 }
 
 impl Renderable for ObjectDisplay {
@@ -18,11 +16,10 @@ impl Renderable for ObjectDisplay {
 }
 
 impl ObjectDisplay {
-    pub fn new(project: Arc<Mutex<Project>>) -> Self {
+    pub fn new() -> Self {
         Self {
             key: String::new(),
             kind: ObjectKind::Functions,
-            project
         }
     }
 }
