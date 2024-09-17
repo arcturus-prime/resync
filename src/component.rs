@@ -8,3 +8,7 @@ pub mod object_display;
 pub trait Renderable {
     fn render(&self, frame: &mut Frame, area: Rect);
 }
+
+pub trait Menu: Renderable {
+    fn update(&mut self, action: Event);
+}

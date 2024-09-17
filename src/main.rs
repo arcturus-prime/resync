@@ -1,12 +1,12 @@
 mod ir;
 mod error;
-mod renderable;
+mod component;
 
 use std::{io::{self, stdout}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::Duration};
 
 use ir::Project;
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
-use renderable::{editable_text::EditableText, project::ProjectMenu, Renderable};
+use component::{editable_text::EditableText, project::ProjectMenu, Menu, Renderable};
 
 fn main() -> io::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
@@ -17,7 +17,7 @@ fn main() -> io::Result<()> {
 
     let mut file_open = EditableText::new();
     let mut focus_open = true;
-    let mut menus: Vec<ProjectMenu> = Vec::new();
+    let mut menus: Vec<Box<dyn Menu>> = Vec::new();
     let mut current = 0;
 
     loop {
@@ -57,7 +57,7 @@ fn main() -> io::Result<()> {
                         };
                         file_open.clear();
 
-                        menus.push(ProjectMenu::new(project));
+                        menus.push(Box::new(ProjectMenu::new(project)));
                         current = menus.len() - 1;
 
                         focus_open = false;

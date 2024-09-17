@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{editable_text::{self, EditableText}, list::SelectableList, object_display::ObjectDisplay, Renderable};
+use super::{editable_text::{self, EditableText}, list::SelectableList, object_display::ObjectDisplay, Renderable, Menu};
 use crate::ir::{ObjectKind, Project};
 
 pub enum Focus {
@@ -35,6 +35,22 @@ impl<'a> Renderable for ProjectMenu<'a> {
 
         self.items[self.tab as usize].render(frame, layout[0]);
     }
+}
+
+impl<'a> Menu for ProjectMenu<'a> {    
+    fn update(&mut self, action: Event) {
+        match action {
+            Event::FocusGained => {}
+            Event::FocusLost => todo!(),
+            Event::Key(k) => {
+                self.handle_key(k)
+            }
+            Event::Mouse(_) => todo!(),
+            Event::Paste(_) => todo!(),
+            Event::Resize(_, _) => {}
+        }
+    }
+
 }
 
 impl<'a> ProjectMenu<'a> {
@@ -74,19 +90,6 @@ impl<'a> ProjectMenu<'a> {
             Focus::Open => {
 
             }
-        }
-    }
-    
-    pub fn update(&mut self, action: Event) {
-        match action {
-            Event::FocusGained => {}
-            Event::FocusLost => todo!(),
-            Event::Key(k) => {
-                self.handle_key(k)
-            }
-            Event::Mouse(_) => todo!(),
-            Event::Paste(_) => todo!(),
-            Event::Resize(_, _) => {}
         }
     }
 

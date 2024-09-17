@@ -77,11 +77,7 @@ impl<'a, T: Display + Clone + Into<Text<'a>>> SelectableList<'a, T> {
     pub fn push(&mut self, item: T) {
         self.items.push(item)
     }
-
-    pub fn append(&mut self, items: &mut Vec<T>) {
-        self.items.append(items);
-    }
-
+    
     pub fn get_current(&self) -> &T {
         &self.items[self.cursor]
     }
