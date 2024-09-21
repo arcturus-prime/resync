@@ -1,25 +1,40 @@
 use std::sync::{Arc, Mutex};
 
-use crate::ir::{ObjectKind, Project};
+use ratatui::text::Text;
+
+use crate::ir::{Function, Global, Project, Type};
 
 use super::Renderable;
 
+pub enum Object {
+    Function(Function),
+    Global(Global),
+    Type(Type),
+}
 pub struct ObjectDisplay {
-    key: String,
-    kind: ObjectKind,
+    pub key: String,
+    pub object: Object
 }
 
 impl Renderable for ObjectDisplay {
     fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
-        todo!()
+        let buffer = match &self.object {
+            Object::Function(f) => serde_json::to_string_pretty(f),
+            Object::Global(g) => serde_json::to_string_pretty(g),
+            Object::Type(t) => serde_json::to_string_pretty(t),
+        }.unwrap();
+
+        let text = Text::from(buffer);
+        
+        frame.render_widget(text, area);
     }
 }
 
 impl ObjectDisplay {
-    pub fn new() -> Self {
+    pub fn new(object: Object) -> Self {
         Self {
             key: String::new(),
-            kind: ObjectKind::Functions,
+            object
         }
     }
 }

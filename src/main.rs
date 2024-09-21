@@ -6,7 +6,7 @@ use std::{io::{self, stdout}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::D
 
 use ir::Project;
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
-use component::{editable_text::EditableText, project::ProjectMenu, Menu, Renderable};
+use component::{editable_text::EditableText, project_display::ProjectDisplay, Renderable};
 
 fn main() -> io::Result<()> {
     stdout().execute(EnterAlternateScreen)?;
@@ -15,25 +15,7 @@ fn main() -> io::Result<()> {
     let mut term = Terminal::new(CrosstermBackend::new(stdout()))?;
     term.clear()?;
 
-    let mut file_open = EditableText::new();
-    let mut focus_open = true;
-    let mut menus: Vec<Box<dyn Menu>> = Vec::new();
-    let mut current = 0;
-
     loop {
-        term.draw(|frame| {
-            if focus_open {
-                file_open.render(frame, frame.area());
-                return
-            }
-
-            if menus.len() == 0 {
-                return
-            }
-            
-            menus[current].render(frame, frame.area())
-        })?;
-
         if event::poll(Duration::from_millis(16))? {
             let event = event::read()?;
 
@@ -44,32 +26,17 @@ fn main() -> io::Result<()> {
 
                 match (k.modifiers, k.code) {
                     (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
-                        focus_open = true;
                     },
                     (KeyModifiers::CONTROL, KeyCode::Char('c')) => break,
                     _ => {},
-                }
-
-                if focus_open {
-                    if k.code == KeyCode::Enter {
-                        let Ok(project) = Project::open(&PathBuf::from(file_open.get())) else {
-                            continue
-                        };
-                        file_open.clear();
-
-                        menus.push(Box::new(ProjectMenu::new(project)));
-                        current = menus.len() - 1;
-
-                        focus_open = false;
-                        continue
-                    }
-
-                    file_open.update(k)
-                } else {
-                    menus[current].update(event)
-                }
+                };
             }
         }
+
+        term.draw(|frame| {
+            
+            
+        })?;
     }
 
     stdout().execute(LeaveAlternateScreen)?;

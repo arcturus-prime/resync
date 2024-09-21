@@ -5,8 +5,8 @@ use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
 use super::Renderable;
 
 pub struct EditableText {
-    buffer: String,
-    index: usize,
+    pub buffer: String,
+    pub index: usize,
 }
 
 impl Renderable for EditableText {

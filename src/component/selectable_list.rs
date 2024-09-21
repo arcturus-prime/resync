@@ -39,15 +39,7 @@ impl<'a, T: Display + Clone + Into<Text<'a>>> Renderable for SelectableList<'a, 
 }
 
 impl<'a, T: Display + Clone + Into<Text<'a>>> SelectableList<'a, T> {
-    pub fn process_key(&mut self, action: KeyEvent) {
-        match (action.modifiers, action.code) {
-            (KeyModifiers::NONE, KeyCode::Up) => self.update_cursor(Direction::Up),
-            (KeyModifiers::NONE, KeyCode::Down) => self.update_cursor(Direction::Down),
-            _ => {},
-        }
-    }
-    
-    fn update_cursor(&mut self, direction: Direction) {
+    pub fn move_cursor(&mut self, direction: Direction) {
         let length = self.items.len();
 
         if length == 0 {
