@@ -1,5 +1,5 @@
 mod ir;
-mod component;
+mod ui;
 mod menu;
 mod client;
 
@@ -9,8 +9,8 @@ use client::Client;
 use ir::{ObjectKind, Project};
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
 
-use component::Renderable;
-use menu::{Direction, Menu};
+use ui::Renderable;
+use menu::Menu;
 
 
 fn exit_screen() -> io::Result<()> {
@@ -68,8 +68,8 @@ fn main() -> Result<(), ir::Error> {
 
         match (k.modifiers, k.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('c')) => break,
-            (KeyModifiers::NONE, KeyCode::Up) => menu.update_cursor(Direction::Up),
-            (KeyModifiers::NONE, KeyCode::Down) => menu.update_cursor(Direction::Down),
+            (KeyModifiers::NONE, KeyCode::Up) => menu.move_cursor_up(),
+            (KeyModifiers::NONE, KeyCode::Down) => menu.move_cursor_down(),
             (KeyModifiers::NONE, KeyCode::Char('1')) => menu.tab = ObjectKind::Types,
             (KeyModifiers::NONE, KeyCode::Char('2')) => menu.tab = ObjectKind::Functions,
             (KeyModifiers::NONE, KeyCode::Char('3')) => menu.tab = ObjectKind::Globals,

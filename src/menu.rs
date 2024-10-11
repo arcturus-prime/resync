@@ -9,12 +9,7 @@ use ratatui::{
 };
 
 use crate::ir::{ObjectKind, Project};
-use crate::component::Renderable;
-
-pub enum Direction {
-    Up,
-    Down,
-}
+use crate::ui::Renderable;
 
 pub struct Menu {
     pub project: Project,
@@ -65,22 +60,27 @@ impl Menu {
         }
     }
 
-    pub fn update_cursor(&mut self, direction: Direction) {
+    pub fn move_cursor_up(&mut self) {
         let length = self.get_current_length();
 
         if length == 0 {
             return;
         }
 
-        self.cursor = match direction {
-            Direction::Down => self.cursor + 1 % length,
-            Direction::Up => {
-                if self.cursor == 0 {
-                    length - 1
-                } else {
-                    self.cursor - 1
-                }
-            }
+        self.cursor += 1 % length;
+    }
+
+    pub fn move_cursor_down(&mut self) {
+        let length = self.get_current_length();
+
+        if length == 0 {
+            return;
+        }
+
+        self.cursor = if self.cursor == 0 {
+            length - 1
+        } else {
+            self.cursor - 1
         }
     }
 

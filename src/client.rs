@@ -51,7 +51,7 @@ impl Client {
         }
     }
 
-    fn send_message(&mut self, message: Message) {
+    pub fn send_message(&mut self, message: Message) {
         let mut buffer = match serde_json::to_vec(&message) {
             Ok(o) => o,
             Err(e) => {

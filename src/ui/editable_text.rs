@@ -16,34 +16,21 @@ impl Renderable for EditableText {
 }
 
 impl EditableText {
-    pub fn update(&mut self, action: KeyEvent) {
-        match action.code {
-            KeyCode::Backspace => self.backspace(),
-            KeyCode::Left => self.move_index_left(),
-            KeyCode::Right => self.move_index_right(),
-            KeyCode::Char(c) => {
-                self.buffer.insert(self.index, c);
-                self.index += 1
-            },
-            _ => {} 
-        }
-    }
-    
-    fn move_index_left(&mut self) {
+    pub fn move_index_left(&mut self) {
         if self.index == 0 {
             return
         }
         self.index -= 1
     }
 
-    fn move_index_right(&mut self) {
+    pub fn move_index_right(&mut self) {
         if self.index >= self.buffer.len() - 1 {
             return
         }
         self.index += 1
     }
 
-    fn backspace(&mut self) {
+    pub fn backspace(&mut self) {
         if self.index == 0 {
             return
         }
