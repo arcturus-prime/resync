@@ -1,10 +1,7 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::collections::HashMap;
 
 use ratatui::{
-    crossterm::{
-        event::{Event, KeyCode, KeyEvent, KeyModifiers},
-        style::Color,
-    },
+    crossterm::style::Color,
     layout::Rect,
     style::Stylize,
     widgets::{List, ListItem},
@@ -20,9 +17,9 @@ pub enum Direction {
 }
 
 pub struct Menu {
-    project: Project,
+    pub project: Project,
     cursor: usize,
-    tab: ObjectKind,
+    pub tab: ObjectKind,
 }
 
 impl Renderable for Menu {
@@ -65,24 +62,6 @@ impl Menu {
             ObjectKind::Types => self.project.types.len(),
             ObjectKind::Functions => self.project.functions.len(),
             ObjectKind::Globals => self.project.globals.len(),
-        }
-    }
-
-    pub fn process_key(&mut self, action: KeyEvent) {
-        match (action.modifiers, action.code) {
-            (KeyModifiers::NONE, KeyCode::Up) => self.update_cursor(Direction::Up),
-            (KeyModifiers::NONE, KeyCode::Down) => self.update_cursor(Direction::Down),
-            (KeyModifiers::NONE, KeyCode::Char('1')) => self.tab = ObjectKind::Types,
-            (KeyModifiers::NONE, KeyCode::Char('2')) => self.tab = ObjectKind::Functions,
-            (KeyModifiers::NONE, KeyCode::Char('3')) => self.tab = ObjectKind::Globals,
-            _ => {}
-        }
-    }
-
-    pub fn update(&mut self, event: Event) {
-        match event {
-            Event::Key(key_event) => self.process_key(key_event),
-            _ => {}
         }
     }
 

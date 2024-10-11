@@ -1,15 +1,16 @@
 mod ir;
-mod error;
 mod component;
 mod menu;
+mod client;
 
-use std::{env, io::{self, stdout}, path::{Path, PathBuf}, process::exit, sync::{Arc, Mutex}, time::Duration};
+use std::{env, io::{self, stdout}, net::{Ipv4Addr, SocketAddr}, path::PathBuf, time::Duration};
 
-use ir::Project;
+use client::Client;
+use ir::{ObjectKind, Project};
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
 
-use component::{editable_text::EditableText, Renderable};
-use menu::Menu;
+use component::Renderable;
+use menu::{Direction, Menu};
 
 
 fn exit_screen() -> io::Result<()> {
@@ -19,13 +20,23 @@ fn exit_screen() -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    let path = PathBuf::from(env::args().next().unwrap());
-    let Ok(project) = Project::open(&path) else {
-        println!("Could not open project!");
+fn main() -> Result<(), ir::Error> {
+    let Some(path_string) = env::args().next() else {
+        println!("Expected a path as an argument!");
         return Ok(())
     };
-    let mut menu: Menu = Menu::new(project);
+    let path = PathBuf::from(path_string);
+    
+    let project = match Project::open(&path) {
+        Ok(o) => o,
+        Err(e) => {
+            println!("Could not open project, creating new one. Reason: {}", e);
+            Project::new()
+        },
+    };
+
+    let mut menu = Menu::new(project);
+    let mut client = Client::connect(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 30012))?;
 
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
@@ -34,6 +45,8 @@ fn main() -> io::Result<()> {
     term.clear()?;
 
     loop {
+        client.update_project(&mut menu.project);
+
         term.draw(|frame| {
             menu.render(frame, frame.area());
         })?;
@@ -55,10 +68,13 @@ fn main() -> io::Result<()> {
 
         match (k.modifiers, k.code) {
             (KeyModifiers::CONTROL, KeyCode::Char('c')) => break,
+            (KeyModifiers::NONE, KeyCode::Up) => menu.update_cursor(Direction::Up),
+            (KeyModifiers::NONE, KeyCode::Down) => menu.update_cursor(Direction::Down),
+            (KeyModifiers::NONE, KeyCode::Char('1')) => menu.tab = ObjectKind::Types,
+            (KeyModifiers::NONE, KeyCode::Char('2')) => menu.tab = ObjectKind::Functions,
+            (KeyModifiers::NONE, KeyCode::Char('3')) => menu.tab = ObjectKind::Globals,
             _ => {},
         }
-
-        menu.update(event);
     }
 
     exit_screen()?;
