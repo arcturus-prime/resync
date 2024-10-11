@@ -6,14 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
-#[repr(u8)]
-#[derive(Clone, Copy)]
-pub enum ObjectKind {
-    Types = 0,
-    Functions,
-    Globals,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Type {
     pub size: usize,
@@ -77,6 +69,12 @@ pub enum TypeInfo {
     Int,
     Uint,
     Float,
+}
+
+pub enum ObjectKind {
+    Functions,
+    Types,
+    Globals,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

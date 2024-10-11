@@ -3,8 +3,8 @@ use ratatui::{crossterm::{event::{KeyCode, KeyEvent}, style::Color}, style::Styl
 use super::Renderable;
 
 pub struct EditableText {
-    buffer: String,
-    index: usize,
+    pub buffer: String,
+    pub index: usize,
 }
 
 impl Renderable for EditableText {
