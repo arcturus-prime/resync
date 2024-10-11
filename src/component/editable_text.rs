@@ -1,6 +1,4 @@
-use std::fmt::Display;
-
-use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEvent, KeyEventKind}, style::Color}, style::Style, text::Text, widgets::Block};
+use ratatui::{crossterm::{event::{KeyCode, KeyEvent}, style::Color}, style::Style, text::Text};
 
 use super::Renderable;
 

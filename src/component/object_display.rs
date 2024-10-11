@@ -1,6 +1,4 @@
-use std::sync::{Arc, Mutex};
-
-use crate::ir::{ObjectKind, Project};
+use crate::ir::ObjectKind;
 
 use super::Renderable;
 

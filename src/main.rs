@@ -1,79 +1,66 @@
 mod ir;
 mod error;
 mod component;
+mod menu;
 
-use std::{io::{self, stdout}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::Duration};
+use std::{env, io::{self, stdout}, path::{Path, PathBuf}, process::exit, sync::{Arc, Mutex}, time::Duration};
 
 use ir::Project;
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
-use component::{editable_text::EditableText, project::ProjectMenu, Menu, Renderable};
+
+use component::{editable_text::EditableText, Renderable};
+use menu::Menu;
+
+
+fn exit_screen() -> io::Result<()> {
+    stdout().execute(LeaveAlternateScreen)?;
+    disable_raw_mode()?;
+
+    Ok(())
+}
 
 fn main() -> io::Result<()> {
+    let path = PathBuf::from(env::args().next().unwrap());
+    let Ok(project) = Project::open(&path) else {
+        println!("Could not open project!");
+        return Ok(())
+    };
+    let mut menu: Menu = Menu::new(project);
+
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
 
     let mut term = Terminal::new(CrosstermBackend::new(stdout()))?;
     term.clear()?;
 
-    let mut file_open = EditableText::new();
-    let mut focus_open = true;
-    let mut menus: Vec<Box<dyn Menu>> = Vec::new();
-    let mut current = 0;
-
     loop {
         term.draw(|frame| {
-            if focus_open {
-                file_open.render(frame, frame.area());
-                return
-            }
-
-            if menus.len() == 0 {
-                return
-            }
-            
-            menus[current].render(frame, frame.area())
+            menu.render(frame, frame.area());
         })?;
 
-        if event::poll(Duration::from_millis(16))? {
-            let event = event::read()?;
-
-            if let Event::Key(k) = event {
-                if k.kind == KeyEventKind::Release {
-                    continue
-                }
-
-                match (k.modifiers, k.code) {
-                    (KeyModifiers::CONTROL, KeyCode::Char('p')) => {
-                        focus_open = true;
-                    },
-                    (KeyModifiers::CONTROL, KeyCode::Char('c')) => break,
-                    _ => {},
-                }
-
-                if focus_open {
-                    if k.code == KeyCode::Enter {
-                        let Ok(project) = Project::open(&PathBuf::from(file_open.get())) else {
-                            continue
-                        };
-                        file_open.clear();
-
-                        menus.push(Box::new(ProjectMenu::new(project)));
-                        current = menus.len() - 1;
-
-                        focus_open = false;
-                        continue
-                    }
-
-                    file_open.update(k)
-                } else {
-                    menus[current].update(event)
-                }
-            }
+        if !event::poll(Duration::from_millis(16))? {
+            continue
         }
+
+        let event = event::read()?;
+
+        let k = match event {
+            Event::Key(key_event) => key_event,
+            _ => continue,
+        };
+
+        if k.kind == KeyEventKind::Release {
+            continue
+        }
+
+        match (k.modifiers, k.code) {
+            (KeyModifiers::CONTROL, KeyCode::Char('c')) => break,
+            _ => {},
+        }
+
+        menu.update(event);
     }
 
-    stdout().execute(LeaveAlternateScreen)?;
-    disable_raw_mode()?;
-
+    exit_screen()?;
     Ok(())
 }
