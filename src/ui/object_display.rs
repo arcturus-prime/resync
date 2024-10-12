@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use ratatui::text::Text;
 
-use crate::ir::{Function, Global, Project, Type};
+use crate::ir::{Function, Global, Project, Type, TypeInfo};
 
 use super::Renderable;
 
@@ -31,10 +31,10 @@ impl Renderable for ObjectDisplay {
 }
 
 impl ObjectDisplay {
-    pub fn new(object: Object) -> Self {
+    pub fn new() -> Self {
         Self {
             key: String::new(),
-            object
+            object: Object::Type(Type { size: 0, alignment: 0, info: TypeInfo::Uint }),
         }
     }
 }

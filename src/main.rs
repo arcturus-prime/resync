@@ -1,6 +1,5 @@
 mod ir;
 mod ui;
-mod menu;
 mod client;
 
 use std::{env, io::{self, stdout}, net::{Ipv4Addr, SocketAddr}, path::PathBuf, time::Duration};
@@ -9,8 +8,7 @@ use client::Client;
 use ir::{ObjectKind, Project};
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
 
-use ui::Renderable;
-use menu::Menu;
+use ui::{menu::Menu, Renderable};
 
 
 fn exit_screen() -> io::Result<()> {
@@ -45,7 +43,7 @@ fn main() -> Result<(), ir::Error> {
     term.clear()?;
 
     loop {
-        client.update_project(&mut menu.project);
+        client.update_project(&mut menu.project, &mut menu.conflicts);
 
         term.draw(|frame| {
             menu.render(frame, frame.area());

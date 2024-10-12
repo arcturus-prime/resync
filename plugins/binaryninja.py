@@ -3,7 +3,8 @@ import socket
 
 from binaryninja import *
 
-file = open("/Users/Arcturus Prime/Documents/deez.bproj", "w")
+
+s = socket()
 
 bin: BinaryView = bv
 project = {
@@ -25,5 +26,3 @@ for binja_type in bin.types:
 for binja_global in bin.data_vars:
     pass
 
-file.write(json.dumps(project))
-file.close()

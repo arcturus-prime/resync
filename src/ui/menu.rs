@@ -2,19 +2,26 @@ use std::collections::HashMap;
 
 use ratatui::{
     crossterm::style::Color,
-    layout::Rect,
+    layout::{Constraint, Layout, Rect},
     style::Stylize,
     widgets::{List, ListItem},
     Frame,
 };
 
-use crate::ir::{ObjectKind, Project};
+use crate::ir::{Function, Global, ObjectKind, Project, Type, TypeInfo};
 use crate::ui::Renderable;
+
+use super::object_display::{Object, ObjectDisplay};
 
 pub struct Menu {
     pub project: Project,
+    pub conflicts: Project,
+
     cursor: usize,
     pub tab: ObjectKind,
+
+    object_disp_a: ObjectDisplay,
+    object_disp_b: ObjectDisplay,
 }
 
 impl Renderable for Menu {
@@ -25,7 +32,14 @@ impl Renderable for Menu {
             ObjectKind::Globals => self.get_list(&self.project.globals, area),
         };
 
-        frame.render_widget(List::new(items).bg(Color::AnsiValue(235)), area)
+        if !self.conflicts.is_empty() {
+            let layout = Layout::new(ratatui::layout::Direction::Horizontal, Constraint::from_percentages([50, 50])).split(area);
+
+            self.object_disp_a.render(frame, layout[0]);
+            self.object_disp_b.render(frame, layout[1])
+        } else {
+            frame.render_widget(List::new(items).bg(Color::AnsiValue(235)), area)
+        }
     }
 }
 
@@ -87,8 +101,11 @@ impl Menu {
     pub fn new(project: Project) -> Self {
         Self {
             project,
+            conflicts: Project::new(),
             tab: ObjectKind::Functions,
             cursor: 0,
+            object_disp_a: ObjectDisplay::new(),
+            object_disp_b: ObjectDisplay::new()
         }
     }
 }
