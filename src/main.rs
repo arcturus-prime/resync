@@ -2,13 +2,13 @@ mod ir;
 mod ui;
 mod client;
 
-use std::{env, io::{self, stdout, Stdout}, net::{Ipv4Addr, SocketAddr}, path::PathBuf, time::Duration};
+use std::{env, io::{self, stdout}, net::{Ipv4Addr, SocketAddr}, path::PathBuf, time::Duration};
 
 use client::Client;
 use ir::{ObjectKind, Project};
 use ratatui::{crossterm::{event::{self, Event, KeyCode, KeyEventKind, KeyModifiers}, terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen}, ExecutableCommand}, prelude::CrosstermBackend, Terminal};
 
-use ui::{project_view::Menu, Renderable};
+use ui::{project_view::ProjectView, Renderable};
 
 
 fn exit_screen() -> io::Result<()> {
@@ -41,7 +41,7 @@ fn main() -> Result<(), ir::Error> {
     term.clear()?;
 
     let mut client = Client::connect(SocketAddr::new(Ipv4Addr::LOCALHOST.into(), 30012))?;
-    let mut menu = Menu::new();
+    let mut menu = ProjectView::new();
 
     loop {
         client.update_project(&mut project, &mut conflicts);

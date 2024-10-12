@@ -8,18 +8,18 @@ use ratatui::{
     Frame,
 };
 
-use crate::ir::{Function, Global, ObjectKind, Project, Type, TypeInfo};
+use crate::ir::{ObjectKind, Project};
 use crate::ui::Renderable;
 
 use super::object_display::{Object, ObjectDisplay};
 
-pub struct Menu {
+pub struct ProjectView {
     cursor: usize,
     pub tab: ObjectKind,
     pub display: ObjectDisplay
 }
 
-impl Renderable<&Project> for Menu {
+impl Renderable<&Project> for ProjectView {
     fn render(&self, frame: &mut Frame, area: Rect, project: &Project) {
         let items = match self.tab {
             ObjectKind::Types => self.get_list(&project.types, area),
@@ -34,7 +34,7 @@ impl Renderable<&Project> for Menu {
     }
 }
 
-impl Menu {
+impl ProjectView {
     fn get_list<T>(&self, map: &HashMap<String, T>, area: Rect) -> Vec<ListItem> {
         let rows = area.rows().count();
 
