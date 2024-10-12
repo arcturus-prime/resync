@@ -7,8 +7,8 @@ pub struct EditableText {
     pub index: usize,
 }
 
-impl Renderable for EditableText {
-    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
+impl Renderable<()> for EditableText {
+    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect, _: ()) {
         let block = Text::styled(&self.buffer, Style::default().bg(Color::AnsiValue(235).into()));
 
         frame.render_widget(block, area);

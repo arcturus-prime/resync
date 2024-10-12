@@ -2,8 +2,8 @@ use ratatui::{layout::Rect, Frame};
 
 pub mod editable_text;
 pub mod object_display;
-pub mod menu;
+pub mod project_view;
 
-pub trait Renderable {
-    fn render(&self, frame: &mut Frame, area: Rect);
+pub trait Renderable<T> {
+    fn render(&self, frame: &mut Frame, area: Rect, data: T);
 }

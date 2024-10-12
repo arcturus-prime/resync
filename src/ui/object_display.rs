@@ -16,8 +16,8 @@ pub struct ObjectDisplay {
     pub object: Object
 }
 
-impl Renderable for ObjectDisplay {
-    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
+impl Renderable<()> for ObjectDisplay {
+    fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect, _: ()) {
         let buffer = match &self.object {
             Object::Function(f) => serde_json::to_string_pretty(f),
             Object::Global(g) => serde_json::to_string_pretty(g),
