@@ -102,6 +102,12 @@ pub enum ObjectKind {
     Globals,
 }
 
+pub enum Object {
+    Function(Function),
+    Global(Global),
+    Type(Type),
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Project {
     pub types: HashMap<String, Type>,
