@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ratatui::{crossterm::style::Color, layout::{Constraint, Layout, Rect}, style::{Style, Stylize}, text::Text, widgets::{List, ListItem}, Frame};
 
-use crate::ir::{Object, ObjectKind, Project, Type, TypeInfo};
+use crate::ir::{self, ObjectKind, Project, Type, TypeInfo};
 
 pub struct EditableText {
     buffer: String,
@@ -10,7 +10,7 @@ pub struct EditableText {
 }
 
 impl EditableText {
-    pub fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect, _: ()) {
+    pub fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect) {
         let block = Text::styled(&self.buffer, Style::default().bg(Color::AnsiValue(235).into()));
 
         frame.render_widget(block, area);
@@ -44,6 +44,11 @@ impl EditableText {
         self.buffer.remove(self.index);
     }
 
+    pub fn replace_buffer(&mut self, buffer: String) {
+        self.buffer = buffer;
+        self.index = 0
+    }
+
     pub fn get(&self) -> &str {
         &self.buffer
     }
@@ -61,47 +66,10 @@ impl EditableText {
     }
 }
 
-pub struct ObjectDisplay {
-    pub key: String,
-    pub object: Object
-}
-
-impl ObjectDisplay {
-    pub fn render(&self, frame: &mut ratatui::Frame, area: ratatui::prelude::Rect, _: ()) {
-        let buffer = match &self.object {
-            Object::Function(f) => serde_json::to_string_pretty(f),
-            Object::Global(g) => serde_json::to_string_pretty(g),
-            Object::Type(t) => serde_json::to_string_pretty(t),
-        }.unwrap();
-
-        let text = Text::from(buffer);
-        
-        frame.render_widget(text, area);
-    }
-
-    pub fn new() -> Self {
-        Self {
-            key: String::new(),
-            object: Object::Type(Type { size: 0, alignment: 0, info: TypeInfo::Uint }),
-        }
-    }
-}
-
-
-pub struct MergeView {
-
-}
-
-impl MergeView {
-    pub fn render(&self, frame: &mut Frame, area: Rect) {
-
-    }
-}
-
 pub struct ProjectView {
     cursor: usize,
     pub tab: ObjectKind,
-    pub display: ObjectDisplay
+    pub display: EditableText
 }
 
 impl ProjectView {
@@ -115,7 +83,7 @@ impl ProjectView {
         let layout = Layout::new(ratatui::layout::Direction::Horizontal, Constraint::from_percentages([50, 50])).split(area);
 
         frame.render_widget(List::new(items).bg(Color::AnsiValue(235)), layout[0]);
-        self.display.render(frame, layout[1],());
+        self.display.render(frame, layout[1]);
     }
 
     fn get_list<T>(&self, map: &HashMap<String, T>, area: Rect) -> Vec<ListItem> {
@@ -148,18 +116,25 @@ impl ProjectView {
         }
     }
 
-    pub fn select_current(&mut self, project: &Project) {
-        match self.tab {
+    pub fn select_current(&mut self, project: &Project) -> Result<(), ir::Error> {
+        let result = match self.tab {
             ObjectKind::Types => {
-                self.display.object = Object::Type(project.types.values().skip(self.cursor).next().unwrap().clone())
+                let obj = project.types.values().skip(self.cursor).next().unwrap().clone();
+                serde_json::to_string_pretty(&obj)
             },
             ObjectKind::Functions => {
-                self.display.object = Object::Function(project.functions.values().skip(self.cursor).next().unwrap().clone())
+                let obj = project.functions.values().skip(self.cursor).next().unwrap().clone();
+                serde_json::to_string_pretty(&obj)
             },
             ObjectKind::Globals => {
-                self.display.object = Object::Global(project.globals.values().skip(self.cursor).next().unwrap().clone())
+                let obj = project.globals.values().skip(self.cursor).next().unwrap().clone();
+                serde_json::to_string_pretty(&obj)
             },
-        }
+        }?;
+
+        self.display.replace_buffer(result);
+
+        Ok(())
     }
 
     pub fn move_cursor_up(&mut self, project: &Project) {
@@ -190,7 +165,7 @@ impl ProjectView {
         Self {
             tab: ObjectKind::Functions,
             cursor: 0,
-            display: ObjectDisplay::new()
+            display: EditableText::new()
         }
     }
 }

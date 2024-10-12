@@ -47,6 +47,10 @@ fn enter_main_screen(term: &mut Terminal<CrosstermBackend<Stdout>>, project: &mu
     loop {
         client.update_project(project, &mut conflicts);
 
+        if !conflicts.is_empty() {
+            enter_merge_screen(term, project, &mut conflicts)?;
+        }
+
         term.draw(|frame| {
             menu.render(frame, frame.area(), &project);
         })?;
@@ -77,5 +81,33 @@ fn enter_main_screen(term: &mut Terminal<CrosstermBackend<Stdout>>, project: &mu
         }
     }
 
+    Ok(())
+}
+
+fn enter_merge_screen(term: &mut Terminal<CrosstermBackend<Stdout>>, project: &mut Project, conflicts: &mut Project) -> Result<(), ir::Error> {
+    loop {
+        term.draw(|frame| {
+        })?;
+
+        if !event::poll(Duration::from_millis(16))? {
+            continue
+        }
+
+        let event = event::read()?;
+
+        let k = match event {
+            Event::Key(key_event) => key_event,
+            _ => continue,
+        };
+
+        if k.kind == KeyEventKind::Release {
+            continue
+        }
+
+        match (k.modifiers, k.code) {
+            (KeyModifiers::NONE, KeyCode::Esc) => break, 
+            _ => {},
+        }
+    }
     Ok(())
 }
