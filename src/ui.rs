@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ratatui::{crossterm::style::Color, layout::{Constraint, Layout, Rect}, style::{Style, Stylize}, text::Text, widgets::{List, ListItem}, Frame};
 
-use crate::ir::{self, ObjectKind, Project, Type, TypeInfo};
+use crate::ir::{self, ObjectKind, Project};
 
 pub struct EditableText {
     buffer: String,
