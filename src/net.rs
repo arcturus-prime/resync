@@ -5,17 +5,21 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir::{Function, Global, Type};
+use crate::ir::{Function, Global, Project, Type};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
-    SyncFunction(String, Function),
-    SyncGlobal(String, Global),
-    SyncType(String, Type),
-
     PushFunction(String, Function),
     PushGlobal(String, Global),
     PushType(String, Type),
+
+    RenameFunction(String),
+    RenameGlobal(String),
+    RenameType(String),
+
+    DeleteFunction(String),
+    DeleteGlobal(String),
+    DeleteType(String),
 }
 
 pub struct Client {
@@ -35,14 +39,14 @@ impl Client {
 
         std::thread::spawn(move || loop {
             if let Err(e) = reader.read_until(b'\n', &mut buffer) {
-                println!("Error reading from stream: {}", e);
+                log::error!("Error reading from stream: {}", e);
                 continue;
             };
 
             let message = match serde_json::from_slice(&buffer) {
                 Ok(o) => o,
                 Err(e) => {
-                    println!("Error while deserializing message from server: {}", e);
+                    log::error!("Error while deserializing message from server: {}", e);
                     continue;
                 }
             };
@@ -57,7 +61,7 @@ impl Client {
                 let mut buffer = match serde_json::to_vec(&message) {
                     Ok(o) => o,
                     Err(e) => {
-                        println!("Error while serializing message: {}", e);
+                        log::error!("Error while serializing message: {}", e);
                         return;
                     }
                 };
@@ -65,7 +69,7 @@ impl Client {
                 buffer.push(b'\n');
 
                 if let Err(e) = stream.write_all(&buffer) {
-                    println!("Error while sending message: {}", e);
+                    log::error!("Error while sending message: {}", e);
                 }
             }
         });

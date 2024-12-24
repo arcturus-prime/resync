@@ -1,8 +1,10 @@
 use std::{
-    collections::HashMap, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path, fmt::Display
+    cell::Cell, collections::HashMap, fmt::Display, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path
 };
 
 use serde::{Deserialize, Serialize};
+
+use crate::error::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Type {
@@ -67,33 +69,6 @@ pub enum TypeInfo {
     Int,
     Uint,
     Float,
-}
-
-#[derive(Debug)]
-pub enum Error {
-    Io(std::io::Error),
-    Serde(serde_json::Error),
-}
-
-impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(value: serde_json::Error) -> Self {
-        Self::Serde(value)
-    }
-}
-
-impl<'a> Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::Io(e) => e.fmt(f),
-            Error::Serde(e) => e.fmt(f),
-        }
-    }
 }
 
 pub enum ObjectKind {
