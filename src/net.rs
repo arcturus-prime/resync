@@ -27,6 +27,34 @@ pub struct Client {
     pub tx: mpsc::Sender<Message>,
 }
 
+macro_rules! rename_object {
+    ( $object_type:literal, $map:expr, $name:expr ) => {{
+        let Some(a) = $map.remove(&$name) else {
+            log::warn!(
+                "Plugin tried to rename a {} that does not exist on client: {}",
+                $object_type,
+                $name
+            );
+            continue;
+        };
+
+        $map.insert($name, a);
+    }};
+}
+
+macro_rules! delete_object {
+    ( $object_type:literal, $map:expr, $name:expr ) => {{
+        if $map.remove(&$name).is_none() {
+            log::warn!(
+                "Plugin tried to delete a {} that does not exist on client: {}",
+                $object_type,
+                $name
+            );
+            continue;
+        }
+    }};
+}
+
 impl Client {
     pub fn connect(socket_addr: SocketAddr) -> io::Result<Self> {
         let stream = TcpStream::connect(socket_addr)?;
@@ -78,5 +106,34 @@ impl Client {
             rx: rx_outside,
             tx: tx_outside,
         })
+    }
+    pub fn update_project(&mut self, project: &mut Project) {
+        loop {
+            let Ok(data) = self.rx.try_recv() else {
+                return;
+            };
+
+            match data {
+                Message::PushFunction(name, function) => {
+                    project.functions.insert(name, function);
+                }
+                Message::PushGlobal(name, global) => {
+                    project.globals.insert(name, global);
+                }
+                Message::PushType(name, type_) => {
+                    project.types.insert(name, type_);
+                }
+                Message::RenameFunction(name) => {
+                    rename_object!("function", project.functions, name)
+                }
+                Message::RenameGlobal(name) => rename_object!("global", project.globals, name),
+                Message::RenameType(name) => rename_object!("type", project.types, name),
+                Message::DeleteFunction(name) => {
+                    delete_object!("function", project.functions, name)
+                }
+                Message::DeleteGlobal(name) => delete_object!("global", project.globals, name),
+                Message::DeleteType(name) => delete_object!("type", project.types, name),
+            }
+        }
     }
 }
