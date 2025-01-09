@@ -79,14 +79,17 @@ pub enum ObjectKind {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Project {
+    pub name: String,
+
     pub types: HashMap<String, Type>,
     pub functions: HashMap<String, Function>,
     pub globals: HashMap<String, Global>,
 }
 
 impl Project {
-    pub fn new() -> Self {
+    pub fn new(name: String) -> Self {
         Self {
+            name,
             types: HashMap::new(),
             functions: HashMap::new(),
             globals: HashMap::new(),
