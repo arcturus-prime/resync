@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::{
     io::{self, BufRead, BufReader, Write},
-    net::{SocketAddr, TcpStream},
+    net::{SocketAddrV4, TcpStream},
     sync::mpsc::{self, Receiver},
 };
 
@@ -56,7 +56,7 @@ macro_rules! delete_object {
 }
 
 impl Client {
-    pub fn connect(socket_addr: SocketAddr) -> io::Result<Self> {
+    pub fn connect(socket_addr: SocketAddrV4) -> io::Result<Self> {
         let stream = TcpStream::connect(socket_addr)?;
 
         let mut reader = BufReader::new(stream.try_clone()?);

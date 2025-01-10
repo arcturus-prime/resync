@@ -1,5 +1,5 @@
 use std::{
-    cell::Cell, collections::HashMap, fmt::Display, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path
+    collections::HashMap, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path
 };
 
 use serde::{Deserialize, Serialize};
@@ -79,17 +79,14 @@ pub enum ObjectKind {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Project {
-    pub name: String,
-
     pub types: HashMap<String, Type>,
     pub functions: HashMap<String, Function>,
     pub globals: HashMap<String, Global>,
 }
 
 impl Project {
-    pub fn new(name: String) -> Self {
+    pub fn new() -> Self {
         Self {
-            name,
             types: HashMap::new(),
             functions: HashMap::new(),
             globals: HashMap::new(),
@@ -120,9 +117,5 @@ impl Project {
         transaction.write(&data)?;
 
         Ok(())
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.functions.is_empty() && self.globals.is_empty() && self.types.is_empty()
     }
 }

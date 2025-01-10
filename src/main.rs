@@ -1,100 +1,125 @@
 mod error;
 mod ir;
 mod net;
+mod ui;
 
-use std::{collections::HashMap, path::PathBuf};
+use std::{net::{Ipv4Addr, SocketAddrV4}, str::FromStr};
 
-use eframe::egui::{self, Layout, Ui};
+use eframe::egui;
+use net::Client;
 use rfd::FileDialog;
 
 use ir::{ObjectKind, Project};
-use net::Client;
+use ui::{ProjectKind, ProjectMenu};
 
-enum ProjectKind {
-    Remote(Client),
-    Local(PathBuf)
-}
 
-struct ProjectTab {
-    kind: ProjectKind,
-    project: Project,
-
-    tab: ObjectKind,
-    cursor: usize,
+#[derive(PartialEq)]
+enum Focus {
+    Open,
+    View,
 }
 
 struct App {
-    tabs: Vec<ProjectTab>,
+    tabs: Vec<ProjectMenu>,
     current: usize,
+
+    ip_text: String,
+    port_text: String,
+
+    focus: Focus,
 }
 
 impl Default for App {
     fn default() -> Self {
-        Self { tabs: vec![], current: 0 }
-    }
-}
+        Self {
+            tabs: vec![],
+            current: 0,
 
-fn display_artifact_list<V>(ui: &mut Ui, start: usize, objects: &HashMap<String, V>) {
-    ui.with_layout(Layout::top_down(egui::Align::Center), |ui| {
-        for k in objects.keys().skip(start - (start % 20)).take(20) {
-            ui.label(k); 
+            ip_text: String::new(),
+            port_text: String::new(),
+
+            focus: Focus::View,
         }
-    });
+    }
 }
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal_top(|ui| {
-                for (tab, i) in self.tabs.iter().zip(0..) {
-                    if ui.button(&tab.project.name).clicked() {
-                        self.current = i;
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            for (tab, i) in self.tabs.iter().zip(0..) {
+                if ui.button(&tab.name).clicked() {
+                    self.current = i;
+                }
+            }
+
+            if ui.button("+").clicked() {
+                self.focus = Focus::Open
+            }
+        });
+
+        if self.focus == Focus::Open {
+            egui::Window::new("Open Project")
+                .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                .collapsible(false)
+                .resizable(false )
+                .show(ctx, |ui| {
+                    if ui.button("Open with file").clicked() {
+                        self.focus = Focus::View;
+
+                        let Some(file) = FileDialog::new().pick_file() else {
+                            return;
+                        };
+
+                        let Ok(project) = Project::open(&file) else {
+                            return;
+                        };
+
+                        self.tabs.push(ProjectMenu {
+                            name: file.to_string_lossy().to_string(),
+                            kind: ProjectKind::Local(file),
+                            project,
+                            tab: ObjectKind::Functions,
+                            cursor: 0,
+                        });
                     }
-                }
 
-                if ui.button("+").clicked() {
-                    let Some(file) = FileDialog::new().pick_file() else {
-                        return
-                    };
+                    ui.add_space(20.0);
 
-                    let Ok(project) = Project::open(&file) else {
-                        return
-                    };
+                    let ip_label = ui.label("IP Address:");
+                    ui.text_edit_singleline(&mut self.ip_text).labelled_by(ip_label.id);
+                
+                    let port_label = ui.label("Port:");
+                    ui.text_edit_singleline(&mut self.port_text).labelled_by(port_label.id);
 
-                    self.tabs.push(ProjectTab { kind: ProjectKind::Local(file.to_path_buf()), project, tab: ObjectKind::Functions, cursor: 0 });
-                }
-            });
 
-            ui.horizontal_top(|ui| {
-                let project_tab = &mut self.tabs[self.current];
+                    if ui.button("Open with network").clicked() {
+                        let ip = Ipv4Addr::from_str(&self.ip_text).unwrap();
+                        let port = u16::from_str(&self.port_text).unwrap();
 
-                if ui.button("Functions").clicked() {
-                    project_tab.tab = ObjectKind::Functions
-                }
+                        let Ok(client) = Client::connect(SocketAddrV4::new(ip, port)) else {
+                            return
+                        };
 
-                if ui.button("Types").clicked() {
-                    project_tab.tab = ObjectKind::Types
-                }
+                        self.tabs.push(ProjectMenu {
+                            name: self.ip_text.clone(),
+                            kind: ProjectKind::Remote(client),
+                            project: Project::new(),
+                            tab: ObjectKind::Functions,
+                            cursor: 0,
+                        });
+                    }
+                });
+        }
 
-                if ui.button("Globals").clicked() {
-                    project_tab.tab = ObjectKind::Globals
-                }
-
-            });
-
-            ui.columns(2, |ui| {
-                let project_tab = &self.tabs[self.current];
-
-                match project_tab.tab {
-                    ObjectKind::Functions => display_artifact_list(&mut ui[0], project_tab.cursor, &project_tab.project.functions),
-                    ObjectKind::Types => display_artifact_list(&mut ui[0], project_tab.cursor, &project_tab.project.types),
-                    ObjectKind::Globals => display_artifact_list(&mut ui[0], project_tab.cursor, &project_tab.project.globals),
-                };
-            })
+        egui::CentralPanel::default().show(ctx, |ui| {
+            if self.tabs.len() == 0 {
+                return;
+            }
+            
+            self.tabs[self.current].update(ui);
         });
     }
 }
-                                  
 
 fn main() -> Result<(), error::Error> {
     env_logger::init();
