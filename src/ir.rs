@@ -1,30 +1,10 @@
 use std::{
-    collections::HashMap, fs::{create_dir_all, File, OpenOptions}, io::{Read, Write}, path::Path
+    fs::{File, OpenOptions}, io::{Read, Write}, path::Path
 };
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Type {
-    pub size: usize,
-    pub alignment: usize,
-    pub info: TypeInfo,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Function {
-    pub location: usize,
-    pub arguments: Vec<Argument>,
-    pub return_type: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Global {
-    pub location: usize,
-    pub global_type: String,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EnumValue {
@@ -35,14 +15,14 @@ pub struct EnumValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: String,
+    pub arg_type: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: String,
+    pub field_type: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -54,8 +34,8 @@ pub enum TypeInfo {
         depth: usize,
     },
     Function {
-        arg_types: Vec<String>,
-        return_type: String,
+        arg_types: Vec<usize>,
+        return_type: usize,
     },
     Struct {
         fields: Vec<StructField>,
@@ -64,32 +44,44 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: String,
+        item_type: usize,
     },
     Int,
     Uint,
     Float,
 }
 
-pub enum ObjectKind {
-    Functions,
-    Types,
-    Globals,
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum Object {
+    Type {
+        size: usize,
+        alignment: usize,
+        info: TypeInfo,
+    },
+    Function {
+        location: usize,
+        arguments: Vec<Argument>,
+        return_type: usize,
+    },
+    Global {
+        location: usize,
+        global_type: usize,
+    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Project {
-    pub types: HashMap<String, Type>,
-    pub functions: HashMap<String, Function>,
-    pub globals: HashMap<String, Global>,
+    objects: Vec<Object>,
+    names: Vec<String>,
 }
 
 impl Project {
     pub fn new() -> Self {
         Self {
-            types: HashMap::new(),
-            functions: HashMap::new(),
-            globals: HashMap::new(),
+            objects: Vec::new(),
+            names: Vec::new(),
         }
     }
 
@@ -106,16 +98,35 @@ impl Project {
     pub fn save(&self, path: &Path) -> Result<(), Error> {
         let mut transaction;
 
-        if !path.exists() && path.parent().is_some() {
-            create_dir_all(path.parent().unwrap())?;
+        if !path.exists() {
             transaction = File::create(path)?;
         } else {
             transaction = OpenOptions::new().write(true).open(path)?;
         }
 
-        let data = serde_json::to_vec_pretty(self)?;
+        let data = serde_json::to_vec_pretty(&self.objects)?;
         transaction.write(&data)?;
 
         Ok(())
+    }
+
+    pub fn get_obj_mut(&mut self, id: usize) -> &mut Object {
+        &mut self.objects[id]
+    }
+
+    pub fn get_obj(&self, id: usize) -> &Object {
+        &self.objects[id]
+    }
+
+    pub fn get_name_mut(&mut self, id: usize) -> &mut String {
+        &mut self.names[id]
+    }
+
+    pub fn get_name(&self, id: usize) -> &String {
+        &self.names[id]
+    }
+
+    pub fn len(&self) -> usize {
+        self.objects.len()
     }
 }

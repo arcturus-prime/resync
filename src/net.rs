@@ -5,54 +5,17 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir::{Function, Global, Project, Type};
+use crate::ir::Object;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Message {
-    PushFunction(String, Function),
-    PushGlobal(String, Global),
-    PushType(String, Type),
-
-    RenameFunction(String),
-    RenameGlobal(String),
-    RenameType(String),
-
-    DeleteFunction(String),
-    DeleteGlobal(String),
-    DeleteType(String),
+    Push(usize, Object),
+    Delete(usize),
 }
 
 pub struct Client {
     pub rx: mpsc::Receiver<Message>,
     pub tx: mpsc::Sender<Message>,
-}
-
-macro_rules! rename_object {
-    ( $object_type:literal, $map:expr, $name:expr ) => {{
-        let Some(a) = $map.remove(&$name) else {
-            log::warn!(
-                "Plugin tried to rename a {} that does not exist on client: {}",
-                $object_type,
-                $name
-            );
-            continue;
-        };
-
-        $map.insert($name, a);
-    }};
-}
-
-macro_rules! delete_object {
-    ( $object_type:literal, $map:expr, $name:expr ) => {{
-        if $map.remove(&$name).is_none() {
-            log::warn!(
-                "Plugin tried to delete a {} that does not exist on client: {}",
-                $object_type,
-                $name
-            );
-            continue;
-        }
-    }};
 }
 
 impl Client {
@@ -106,34 +69,5 @@ impl Client {
             rx: rx_outside,
             tx: tx_outside,
         })
-    }
-    pub fn update_project(&mut self, project: &mut Project) {
-        loop {
-            let Ok(data) = self.rx.try_recv() else {
-                return;
-            };
-
-            match data {
-                Message::PushFunction(name, function) => {
-                    project.functions.insert(name, function);
-                }
-                Message::PushGlobal(name, global) => {
-                    project.globals.insert(name, global);
-                }
-                Message::PushType(name, type_) => {
-                    project.types.insert(name, type_);
-                }
-                Message::RenameFunction(name) => {
-                    rename_object!("function", project.functions, name)
-                }
-                Message::RenameGlobal(name) => rename_object!("global", project.globals, name),
-                Message::RenameType(name) => rename_object!("type", project.types, name),
-                Message::DeleteFunction(name) => {
-                    delete_object!("function", project.functions, name)
-                }
-                Message::DeleteGlobal(name) => delete_object!("global", project.globals, name),
-                Message::DeleteType(name) => delete_object!("type", project.types, name),
-            }
-        }
     }
 }

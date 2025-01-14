@@ -3,15 +3,17 @@ mod ir;
 mod net;
 mod ui;
 
-use std::{net::{Ipv4Addr, SocketAddrV4}, str::FromStr};
+use std::{
+    net::{Ipv4Addr, SocketAddrV4},
+    str::FromStr,
+};
 
-use eframe::egui;
+use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use ir::{ObjectKind, Project};
+use ir::Project;
 use ui::{ProjectKind, ProjectMenu};
-
 
 #[derive(PartialEq)]
 enum Focus {
@@ -43,9 +45,72 @@ impl Default for App {
     }
 }
 
-impl eframe::App for App {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+impl App {
+    fn handle_add_project_window(&mut self, ui: &mut Ui) {
+        //Open project from file
+        if ui.button("Open").clicked() {
+            let Some(file) = FileDialog::new().pick_file() else {
+                return;
+            };
+
+            let Ok(project) = Project::open(&file) else {
+                return;
+            };
+
+            let Some(filename) = file.file_name() else {
+                return;
+            };
+
+            let name = filename.to_string_lossy().to_string();
+
+            self.tabs.push(ProjectMenu::new(ProjectKind::Local(file), name, project));
+            self.focus = Focus::View;
+        }
+
+        //Create new project
+        ui.add_space(5.0);
+
+        if ui.button("New").clicked() {
+            let Some(file) = FileDialog::new().save_file() else {
+                return;
+            };
+
+            let Some(filename) = file.file_name() else {
+                return;
+            };
+
+            let name = filename.to_string_lossy().to_string();
+
+            self.tabs.push(ProjectMenu::new(ProjectKind::Local(file), name, Project::new()));
+            self.focus = Focus::View;
+        }
+
+        // Open project with connection to client
+        ui.add_space(15.0);
+
+        let ip_label = ui.label("IP Address:");
+        ui.text_edit_singleline(&mut self.ip_text)
+            .labelled_by(ip_label.id);
+
+        let port_label = ui.label("Port:");
+        ui.text_edit_singleline(&mut self.port_text)
+            .labelled_by(port_label.id);
+
+        if ui.button("Connect").clicked() {
+            let ip = Ipv4Addr::from_str(&self.ip_text).unwrap();
+            let port = u16::from_str(&self.port_text).unwrap();
+
+            let Ok(client) = Client::connect(SocketAddrV4::new(ip, port)) else {
+                return;
+            };
+
+            self.tabs.push(ProjectMenu::new(ProjectKind::Remote(client), self.ip_text.clone(), Project::new()));
+            self.focus = Focus::View;
+        }
+    }
+
+    fn handle_top_project_bar(&mut self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
             for (tab, i) in self.tabs.iter().zip(0..) {
                 if ui.button(&tab.name).clicked() {
                     self.current = i;
@@ -56,66 +121,26 @@ impl eframe::App for App {
                 self.focus = Focus::Open
             }
         });
+    }
+}
+
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| self.handle_top_project_bar(ui));
 
         if self.focus == Focus::Open {
-            egui::Window::new("Open Project")
+            egui::Window::new("Add Project")
                 .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
                 .collapsible(false)
-                .resizable(false )
-                .show(ctx, |ui| {
-                    if ui.button("Open with file").clicked() {
-                        self.focus = Focus::View;
-
-                        let Some(file) = FileDialog::new().pick_file() else {
-                            return;
-                        };
-
-                        let Ok(project) = Project::open(&file) else {
-                            return;
-                        };
-
-                        self.tabs.push(ProjectMenu {
-                            name: file.to_string_lossy().to_string(),
-                            kind: ProjectKind::Local(file),
-                            project,
-                            tab: ObjectKind::Functions,
-                            cursor: 0,
-                        });
-                    }
-
-                    ui.add_space(20.0);
-
-                    let ip_label = ui.label("IP Address:");
-                    ui.text_edit_singleline(&mut self.ip_text).labelled_by(ip_label.id);
-                
-                    let port_label = ui.label("Port:");
-                    ui.text_edit_singleline(&mut self.port_text).labelled_by(port_label.id);
-
-
-                    if ui.button("Open with network").clicked() {
-                        let ip = Ipv4Addr::from_str(&self.ip_text).unwrap();
-                        let port = u16::from_str(&self.port_text).unwrap();
-
-                        let Ok(client) = Client::connect(SocketAddrV4::new(ip, port)) else {
-                            return
-                        };
-
-                        self.tabs.push(ProjectMenu {
-                            name: self.ip_text.clone(),
-                            kind: ProjectKind::Remote(client),
-                            project: Project::new(),
-                            tab: ObjectKind::Functions,
-                            cursor: 0,
-                        });
-                    }
-                });
+                .resizable(false)
+                .show(ctx, |ui| self.handle_add_project_window(ui));
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.tabs.len() == 0 {
                 return;
             }
-            
+
             self.tabs[self.current].update(ui);
         });
     }
@@ -136,7 +161,9 @@ fn main() -> Result<(), error::Error> {
     eframe::run_native(
         "eframe template",
         native_options,
-        Box::new(|cc| Ok(Box::new(app))),
+        Box::new(|_cc| {
+            Ok(Box::new(app))
+        }),
     )?;
 
     Ok(())
