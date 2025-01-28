@@ -5,12 +5,22 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir::Object;
+use crate::ir::{Object, Project};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
-    Push(usize, Object),
-    Delete(usize),
+    Sync {
+        objects: Vec<Object>,
+    },
+    Delete {
+        id: usize,
+    },
+    Push {
+        id: usize,
+        object: Object,
+    },
 }
 
 pub struct Client {
@@ -69,5 +79,23 @@ impl Client {
             rx: rx_outside,
             tx: tx_outside,
         })
+    }
+
+    pub fn update_project(&mut self, project: &mut Project) {
+        let Ok(message) = self.rx.try_recv() else {
+            return;
+        };
+
+        match message {
+            Message::Sync { objects } => {
+                project.objects = objects;
+            }
+            Message::Delete { id } => {
+                project.objects.remove(id);
+            }
+            Message::Push { id, object } => {
+                project.objects.insert(id, object);
+            }
+        }
     }
 }
