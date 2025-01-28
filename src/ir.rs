@@ -1,5 +1,7 @@
 use std::{
-    fs::{File, OpenOptions}, io::{Read, Write}, path::Path
+    fs::{File, OpenOptions},
+    io::{Read, Write},
+    path::Path,
 };
 
 use serde::{Deserialize, Serialize};
@@ -56,32 +58,43 @@ pub enum TypeInfo {
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Object {
     Type {
+        name: String,
         size: usize,
         alignment: usize,
         info: TypeInfo,
     },
     Function {
+        name: String,
         location: usize,
         arguments: Vec<Argument>,
         return_type: usize,
     },
     Global {
+        name: String,
         location: usize,
         global_type: usize,
+    },
+}
+
+impl Object {
+    pub fn name(&self) -> &String {
+        match self {
+            Object::Type { name, .. } => name,
+            Object::Function { name, .. } => name,
+            Object::Global { name, .. } => name,
+        }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
-    objects: Vec<Object>,
-    names: Vec<String>,
+    pub objects: Vec<Object>,
 }
 
 impl Project {
     pub fn new() -> Self {
         Self {
             objects: Vec::new(),
-            names: Vec::new(),
         }
     }
 
@@ -108,25 +121,5 @@ impl Project {
         transaction.write(&data)?;
 
         Ok(())
-    }
-
-    pub fn get_obj_mut(&mut self, id: usize) -> &mut Object {
-        &mut self.objects[id]
-    }
-
-    pub fn get_obj(&self, id: usize) -> &Object {
-        &self.objects[id]
-    }
-
-    pub fn get_name_mut(&mut self, id: usize) -> &mut String {
-        &mut self.names[id]
-    }
-
-    pub fn get_name(&self, id: usize) -> &String {
-        &self.names[id]
-    }
-
-    pub fn len(&self) -> usize {
-        self.objects.len()
     }
 }
