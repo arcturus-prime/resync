@@ -39,11 +39,11 @@ impl ProjectMenu {
             egui::ScrollArea::vertical().show_rows(
                 &mut ui[0],
                 text_style,
-                self.project.objects.len(),
+                self.project.names.len(),
                 |ui, row_range| {
                     for i in row_range {
                         let selected = self.selected.contains(&i);
-                        let label = ui.selectable_label(selected, self.project.objects[i].name());
+                        let label = ui.selectable_label(selected, &self.project.names[i]);
 
                         if label.clicked() && selected {
                             self.selected.remove(&i);

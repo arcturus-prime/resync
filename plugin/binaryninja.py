@@ -113,11 +113,11 @@ class NetworkHandler(BackgroundTaskThread):
         self.connections = [ socket ]
 
     def init_sync(self):
-        for func in bv.functions:
+        for func in bv.functions: 
             self.lifter.lift_function(func)
 
     def handle_message(self, message):
-        print(message)
+        print(message) 
 
     def run(self):
         while True:
@@ -133,15 +133,12 @@ class NetworkHandler(BackgroundTaskThread):
                     
                 else:
                     data = connection.recv()
-
+ 
                     if data is None:
                         continue
-                    
+                     
                     self.handle_message(data)
 
-
-
-            
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind('localhost', PORT_NUMBER)

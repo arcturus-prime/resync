@@ -1,7 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
-    path::Path,
+    path::Path, string,
 };
 
 use serde::{Deserialize, Serialize};
@@ -58,43 +58,33 @@ pub enum TypeInfo {
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Object {
     Type {
-        name: String,
         size: usize,
         alignment: usize,
         info: TypeInfo,
     },
     Function {
-        name: String,
         location: usize,
         arguments: Vec<Argument>,
         return_type: usize,
     },
     Global {
-        name: String,
         location: usize,
         global_type: usize,
     },
-}
-
-impl Object {
-    pub fn name(&self) -> &String {
-        match self {
-            Object::Type { name, .. } => name,
-            Object::Function { name, .. } => name,
-            Object::Global { name, .. } => name,
-        }
-    }
+    Null
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     pub objects: Vec<Object>,
+    pub names: Vec<String>,
 }
 
 impl Project {
     pub fn new() -> Self {
         Self {
             objects: Vec::new(),
+            names: Vec::new(),
         }
     }
 

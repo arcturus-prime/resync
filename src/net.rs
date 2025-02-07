@@ -11,14 +11,12 @@ use crate::ir::{Object, Project};
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
-    Sync {
-        objects: Vec<Object>,
-    },
     Delete {
         id: usize,
     },
     Push {
         id: usize,
+        name: String,
         object: Object,
     },
 }
@@ -87,14 +85,19 @@ impl Client {
         };
 
         match message {
-            Message::Sync { objects } => {
-                project.objects = objects;
-            }
             Message::Delete { id } => {
-                project.objects.remove(id);
+                if id < project.objects.len() {
+                    project.objects[id] = Object::Null;
+                }
             }
-            Message::Push { id, object } => {
-                project.objects.insert(id, object);
+            Message::Push { id, name, object } => {
+                if id == project.objects.len() {
+                    project.names.push(name);
+                    project.objects.push(object);
+                } else if id < project.objects.len() {
+                    project.names[id] = name;
+                    project.objects[id] = object;
+                }
             }
         }
     }
