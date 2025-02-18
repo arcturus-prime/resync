@@ -2,7 +2,7 @@ use std::{collections::HashSet, path::PathBuf};
 
 use eframe::egui::{self, Ui};
 
-use crate::{ir::Project, net::{Client, Message}};
+use crate::{ir::Project, net::Client};
 
 pub enum ProjectKind {
     Remote(Client),

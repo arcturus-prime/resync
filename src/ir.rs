@@ -1,7 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
-    path::Path, string,
+    path::Path,
     collections::HashMap
 };
 
