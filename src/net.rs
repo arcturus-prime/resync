@@ -86,8 +86,6 @@ impl Client {
             return;
         };
 
-        println!("{}", message);
-
         match message {
             Message::Delete { name } => {
             }
