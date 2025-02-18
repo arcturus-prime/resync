@@ -2,6 +2,7 @@ use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::Path, string,
+    collections::HashMap
 };
 
 use serde::{Deserialize, Serialize};
@@ -74,28 +75,28 @@ pub enum Object {
     Null
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Project {
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ProjectData {
     pub objects: Vec<Object>,
     pub names: Vec<String>,
 }
 
-impl Project {
+impl ProjectData {
     pub fn new() -> Self {
         Self {
             objects: Vec::new(),
             names: Vec::new(),
         }
     }
-
+    
     pub fn open(path: &Path) -> Result<Self, Error> {
         let mut project_file = File::open(&path)?;
         let mut project_data = Vec::<u8>::new();
 
         project_file.read_to_end(&mut project_data)?;
-        let project = serde_json::from_slice(project_data.as_slice())?;
+        let object_list = serde_json::from_slice(project_data.as_slice())?;
 
-        Ok(project)
+        Ok(object_list)
     }
 
     pub fn save(&self, path: &Path) -> Result<(), Error> {
@@ -111,5 +112,37 @@ impl Project {
         transaction.write(&data)?;
 
         Ok(())
+    }
+}
+
+pub struct Project {
+    pub data: ProjectData,
+    pub lookup: HashMap<String, usize>,
+}
+
+impl Project {
+    pub fn new() -> Self {
+        Self {
+            data: ProjectData::new(),
+            lookup: HashMap::new(),
+        }
+    }
+
+    pub fn open(path: &Path) -> Result<Self, Error> {
+        let data = ProjectData::open(path)?;
+        let mut lookup = HashMap::new();
+
+        for (i, name) in data.names.iter().enumerate() {
+            lookup.insert(name.to_string(), i);
+        }
+
+        Ok(Self {
+            data,
+            lookup
+        })
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), Error> {
+        self.data.save(path)
     }
 }

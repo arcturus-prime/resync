@@ -12,11 +12,13 @@ use crate::ir::{Object, Project};
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
     Delete {
-        id: usize,
+        name: String,
+    },
+    Rename {
+        old: String,
+        new: String,
     },
     Push {
-        id: usize,
-        name: String,
         object: Object,
     },
 }
@@ -84,20 +86,15 @@ impl Client {
             return;
         };
 
+        println!("{}", message);
+
         match message {
-            Message::Delete { id } => {
-                if id < project.objects.len() {
-                    project.objects[id] = Object::Null;
-                }
+            Message::Delete { name } => {
             }
-            Message::Push { id, name, object } => {
-                if id == project.objects.len() {
-                    project.names.push(name);
-                    project.objects.push(object);
-                } else if id < project.objects.len() {
-                    project.names[id] = name;
-                    project.objects[id] = object;
-                }
+            Message::Rename { old, new } => {
+
+            }
+            Message::Push { object } => {
             }
         }
     }
