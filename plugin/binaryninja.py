@@ -10,7 +10,7 @@ import select
 from typing import Tuple
 from binaryninja import *
 
-def get_pointer_info(self, type_):
+def get_pointer_info(type_):
     depth = 0
     while type_.children[0].type_class == TypeClass.PointerTypeClass:
         type_ = type_.children[0]
@@ -18,28 +18,30 @@ def get_pointer_info(self, type_):
 
     return type_, depth
 
-def lift_function(self, func):
+def lift_function(func):
     arguments = []
     for parameter in func.type.parameters:
         arguments.append({ "name": parameter.name, "arg_type": parameter.type.get_string() })
 
-    resync_func = { "kind": "function", "name": func.name, "location": func.start, "return_type": func.return_type.get_string(), "arguments": arguments }
+    resync_func = { "kind": "function", "location": func.start, "return_type": func.return_type.get_string(), "arguments": arguments }
 
-    return resync_func
+    return resync_func, func.name
 
-def lift_type(self, type_):
-    resync_type = { "size": type_.width, "alignment": type_.alignment }
-
+def lift_type(type_):
+    resync_type = { "kind": "type", "size": type_.width, "alignment": type_.alignment }
+    resync_type["info"] = {}
+   
     if type_.type_class == TypeClass.PointerTypeClass:
-        resync_type["info"] = {}
         resync_type["info"]["kind"] = "pointer"
 
-        ptr_base_type, binal_type["info"]["depth"] = self.get_pointer_info(type_)
+        ptr_base_type, resync_type["info"]["depth"] = get_pointer_info(type_)
         resync_type["info"]["to_type"] = ptr_base_type.get_string()
 
-    return resync_type
+    resync_type["info"]["kind"] = "uint"
 
-def lift_global(self, func):
+    return resync_type, type_.get_string()
+
+def lift_global(global_):
     pass
 
 class Connection:
@@ -50,10 +52,16 @@ class Connection:
     def send(self, data):
         binary_data = json.dumps(data) + "\n"
 
-        self.socket.sendall(binary_data.encode('utf-8'))
+        try:
+            self.socket.sendall(binary_data.encode('utf-8'))
+        except ConnectionResetError:
+            return None
 
     def recv(self):
-        data = self.socket.recv(1024)
+        try:
+            data = self.socket.recv(1024)
+        except ConnectionResetError:
+            return None
 
         self.buffer += data
 
@@ -64,13 +72,20 @@ class Connection:
         return None
     
     def init_sync(self):
-        for _type in bv.types:
-            resync_type = lift_type(_type)
-            self.send(resync_type)
+        objects = []
+        names = []
+
+        for type_ in bv.types.values():
+            resync_type, name = lift_type(type_)
+            objects.append(resync_type)
+            names.append(name)
 
         for func in bv.functions: 
-            resync_func = lift_function(func)
-            self.send(resync_func)
+            resync_func, name = lift_function(func)
+            objects.append(resync_func)
+            names.append(name)
+
+        self.send({ "kind": "sync", "objects": objects, "names": names })
 
     def fileno(self):
         return self.socket.fileno()
@@ -135,8 +150,10 @@ class NetworkHandler(BackgroundTaskThread):
 
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.bind('localhost', PORT_NUMBER)
+s.bind(('127.0.0.1', PORT_NUMBER))
 s.listen(1)
 
 handler = NetworkHandler(s)
 handler.start()
+
+print("HELLO")

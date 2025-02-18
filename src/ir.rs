@@ -18,14 +18,14 @@ pub struct EnumValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: usize,
+    pub arg_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: usize,
+    pub field_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -33,12 +33,12 @@ pub struct StructField {
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
     Pointer {
-        to_type: usize,
+        to_type: String,
         depth: usize,
     },
     Function {
-        arg_types: Vec<usize>,
-        return_type: usize,
+        arg_types: Vec<String>,
+        return_type: String,
     },
     Struct {
         fields: Vec<StructField>,
@@ -47,7 +47,7 @@ pub enum TypeInfo {
         values: Vec<EnumValue>,
     },
     Array {
-        item_type: usize,
+        item_type: String,
     },
     Int,
     Uint,
@@ -66,11 +66,11 @@ pub enum Object {
     Function {
         location: usize,
         arguments: Vec<Argument>,
-        return_type: usize,
+        return_type: String,
     },
     Global {
         location: usize,
-        global_type: usize,
+        global_type: String,
     },
     Null
 }
@@ -145,4 +145,5 @@ impl Project {
     pub fn save(&self, path: &Path) -> Result<(), Error> {
         self.data.save(path)
     }
+
 }

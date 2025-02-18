@@ -19,8 +19,13 @@ pub enum Message {
         new: String,
     },
     Push {
+        name: String,
         object: Object,
     },
+    Sync {
+        names: Vec<String>,
+        objects: Vec<Object>,
+    }
 }
 
 pub struct Client {
@@ -92,7 +97,11 @@ impl Client {
             Message::Rename { old, new } => {
 
             }
-            Message::Push { object } => {
+            Message::Push { name, object } => {
+            }
+            Message::Sync { names, objects } => {
+                project.data.names = names;
+                project.data.objects = objects;
             }
         }
     }
