@@ -142,7 +142,6 @@ class NetworkHandler(BackgroundTaskThread):
                     
                 else:
                     data = connection.recv()
- 
                     if data is None:
                         continue
                      
@@ -155,5 +154,3 @@ s.listen(1)
 
 handler = NetworkHandler(s)
 handler.start()
-
-print("HELLO")

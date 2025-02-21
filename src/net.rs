@@ -5,7 +5,7 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir::{Object, Project};
+use crate::ir::Object;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
@@ -25,7 +25,7 @@ pub enum Message {
     Sync {
         names: Vec<String>,
         objects: Vec<Object>,
-    }
+    },
 }
 
 pub struct Client {
@@ -84,25 +84,5 @@ impl Client {
             rx: rx_outside,
             tx: tx_outside,
         })
-    }
-
-    pub fn update_project(&mut self, project: &mut Project) {
-        let Ok(message) = self.rx.try_recv() else {
-            return;
-        };
-
-        match message {
-            Message::Delete { name } => {
-            }
-            Message::Rename { old, new } => {
-
-            }
-            Message::Push { name, object } => {
-            }
-            Message::Sync { names, objects } => {
-                project.data.names = names;
-                project.data.objects = objects;
-            }
-        }
     }
 }

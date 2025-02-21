@@ -114,36 +114,3 @@ impl ProjectData {
         Ok(())
     }
 }
-
-pub struct Project {
-    pub data: ProjectData,
-    pub lookup: HashMap<String, usize>,
-}
-
-impl Project {
-    pub fn new() -> Self {
-        Self {
-            data: ProjectData::new(),
-            lookup: HashMap::new(),
-        }
-    }
-
-    pub fn open(path: &Path) -> Result<Self, Error> {
-        let data = ProjectData::open(path)?;
-        let mut lookup = HashMap::new();
-
-        for (i, name) in data.names.iter().enumerate() {
-            lookup.insert(name.to_string(), i);
-        }
-
-        Ok(Self {
-            data,
-            lookup
-        })
-    }
-
-    pub fn save(&self, path: &Path) -> Result<(), Error> {
-        self.data.save(path)
-    }
-
-}

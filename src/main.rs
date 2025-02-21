@@ -4,6 +4,7 @@ mod net;
 mod ui;
 
 use std::{
+    collections::HashSet,
     net::{Ipv4Addr, SocketAddrV4},
     str::FromStr,
 };
@@ -12,8 +13,7 @@ use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use ir::Project;
-use ui::{ProjectKind, ProjectMenu};
+use ui::{Project, ProjectKind};
 
 #[derive(PartialEq)]
 enum Focus {
@@ -22,8 +22,10 @@ enum Focus {
 }
 
 struct App {
-    tabs: Vec<ProjectMenu>,
+    tabs: Vec<Project>,
     current: usize,
+
+    clipboard: (usize, HashSet<usize>),
 
     ip_text: String,
     port_text: String,
@@ -36,6 +38,8 @@ impl Default for App {
         Self {
             tabs: vec![],
             current: 0,
+
+            clipboard: (0, HashSet::new()),
 
             ip_text: String::new(),
             port_text: String::new(),
@@ -53,17 +57,16 @@ impl App {
                 return;
             };
 
-            let Ok(project) = Project::open(&file) else {
-                return;
-            };
-
             let Some(filename) = file.file_name() else {
                 return;
             };
+            let filename = filename.to_string_lossy().to_string();
 
-            let name = filename.to_string_lossy().to_string();
+            let Ok(project) = Project::new(ProjectKind::Local(file), filename) else {
+                return;
+            };
 
-            self.tabs.push(ProjectMenu::new(ProjectKind::Local(file), name, project));
+            self.tabs.push(project);
             self.focus = Focus::View;
         }
 
@@ -78,10 +81,13 @@ impl App {
             let Some(filename) = file.file_name() else {
                 return;
             };
+            let filename = filename.to_string_lossy().to_string();
+            
+            let Ok(project) = Project::new(ProjectKind::Local(file), filename) else {
+                return;
+            };
 
-            let name = filename.to_string_lossy().to_string();
-
-            self.tabs.push(ProjectMenu::new(ProjectKind::Local(file), name, Project::new()));
+            self.tabs.push(project);
             self.focus = Focus::View;
         }
 
@@ -104,7 +110,12 @@ impl App {
                 return;
             };
 
-            self.tabs.push(ProjectMenu::new(ProjectKind::Remote(client), self.ip_text.clone(), Project::new()));
+            let Ok(project) = Project::new(ProjectKind::Remote(client), self.ip_text.clone())
+            else {
+                return;
+            };
+
+            self.tabs.push(project);
             self.focus = Focus::View;
         }
     }
@@ -136,11 +147,27 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.handle_add_project_window(ui));
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if self.tabs.len() == 0 {
-                return;
-            }
+        if self.tabs.len() == 0 {
+            return;
+        }
 
+        if ctx.input(|i| i.key_down(egui::Key::Copy)) {
+            self.clipboard.1 = self.tabs[self.current].selected.clone();
+            self.clipboard.0 = self.current;
+        }
+
+        if ctx.input(|i| i.key_down(egui::Key::Paste)) {
+            for id in &self.clipboard.1 {
+                let pair = self.tabs[self.clipboard.0].get_object(*id);
+
+                let name = pair.0.clone();
+                let object = pair.1.clone();
+
+                self.tabs[self.current].add_object(name, object);
+            }
+        }
+
+        egui::CentralPanel::default().show(ctx, |ui| {
             self.tabs[self.current].update(ui);
         });
     }
@@ -158,14 +185,7 @@ fn main() -> Result<(), error::Error> {
         ..Default::default()
     };
 
-    eframe::run_native(
-        "eframe template",
-        native_options,
-        Box::new(|_cc| {
-            Ok(Box::new(app))
-        }),
-    )?;
+    eframe::run_native("resync", native_options, Box::new(|_cc| Ok(Box::new(app))))?;
 
     Ok(())
 }
-
