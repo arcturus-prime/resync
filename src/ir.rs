@@ -1,8 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
-    path::Path,
-    collections::HashMap
+    path::Path
 };
 
 use serde::{Deserialize, Serialize};
