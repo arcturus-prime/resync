@@ -1,11 +1,76 @@
 use serde::{Deserialize, Serialize};
+
 use std::{
     io::{self, BufRead, BufReader, Write},
     net::{SocketAddrV4, TcpStream},
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir::Object;
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EnumValue {
+    pub name: String,
+    pub value: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Argument {
+    pub name: String,
+    pub arg_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct StructField {
+    pub name: String,
+    pub offset: usize,
+    pub field_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum TypeInfo {
+    Pointer {
+        to_type: String,
+        depth: usize,
+    },
+    Function {
+        arg_types: Vec<String>,
+        return_type: String,
+    },
+    Struct {
+        fields: Vec<StructField>,
+    },
+    Enum {
+        values: Vec<EnumValue>,
+    },
+    Array {
+        item_type: String,
+    },
+    Int,
+    Uint,
+    Float,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum Object {
+    Type {
+        size: usize,
+        alignment: usize,
+        info: TypeInfo,
+    },
+    Function {
+        location: usize,
+        arguments: Vec<Argument>,
+        return_type: String,
+    },
+    Global {
+        location: usize,
+        global_type: String,
+    },
+    Null
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]

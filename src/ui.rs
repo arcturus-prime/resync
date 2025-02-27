@@ -8,7 +8,7 @@ use std::{
 use eframe::egui::{self, Ui};
 use serde::{Serialize, Deserialize};
 
-use crate::{error::Error, ir::Object, net::{Client, Message}};
+use crate::{error::Error, net::{Client, Message, Object}};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectData {

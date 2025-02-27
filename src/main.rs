@@ -1,5 +1,4 @@
 mod error;
-mod ir;
 mod net;
 mod ui;
 
