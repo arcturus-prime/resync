@@ -1,10 +1,12 @@
 use serde::{Deserialize, Serialize};
 
 use std::{
-    io::{self, BufRead, BufReader, Write},
-    net::{SocketAddrV4, TcpStream},
-    sync::mpsc::{self, Receiver},
+    io::{BufRead, BufReader, BufWriter, Write},
+    net::{SocketAddrV4, TcpStream, TcpListener},
+    sync::{Arc, Mutex},
 };
+
+use crate::error::Error;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EnumValue {
@@ -94,60 +96,65 @@ pub enum Message {
 }
 
 pub struct Client {
-    pub rx: mpsc::Receiver<Message>,
-    pub tx: mpsc::Sender<Message>,
+    reader: BufReader<TcpStream>,
+    writer: BufWriter<TcpStream>,
+    
+    buffer: Vec<u8>,
 }
 
 impl Client {
-    pub fn connect(socket_addr: SocketAddrV4) -> io::Result<Self> {
-        let stream = TcpStream::connect(socket_addr)?;
+    pub fn read(&mut self) -> Result<Message, Error> {
+        let _ = self.reader.read_until(b'\n', &mut self.buffer)?;
+        let message = serde_json::from_slice(&self.buffer)?;
+    
+        Ok(message)
+    }
 
-        let mut reader = BufReader::new(stream.try_clone()?);
-        let mut buffer = Vec::new();
+    pub fn write(&mut self, message: Message) -> Result<(), Error> {
+        let mut buffer = serde_json::to_vec(&message)?;
+        
+        buffer.push(b'\n');
 
-        let (tx_inside, rx_outside) = mpsc::channel();
-        let (tx_outside, rx_inside): (mpsc::Sender<Message>, Receiver<Message>) = mpsc::channel();
+        let _ = self.writer.write(&buffer)?;
+    
+        Ok(())
+    }
 
-        std::thread::spawn(move || loop {
-            if let Err(e) = reader.read_until(b'\n', &mut buffer) {
-                log::error!("Error reading from stream: {}", e);
-                continue;
-            };
+    pub fn flush(&mut self) -> Result<(), Error> {
+        Ok(self.writer.flush()?)
+    }
 
-            let message = match serde_json::from_slice(&buffer) {
-                Ok(o) => o,
-                Err(e) => {
-                    log::error!("Error while deserializing message from server: {}", e);
-                    continue;
-                }
-            };
-
-            tx_inside.send(message).unwrap();
-        });
-
-        let mut stream = stream.try_clone()?;
-
-        std::thread::spawn(move || loop {
-            if let Ok(message) = rx_inside.recv() {
-                let mut buffer = match serde_json::to_vec(&message) {
-                    Ok(o) => o,
-                    Err(e) => {
-                        log::error!("Error while serializing message: {}", e);
-                        return;
-                    }
-                };
-
-                buffer.push(b'\n');
-
-                if let Err(e) = stream.write_all(&buffer) {
-                    log::error!("Error while sending message: {}", e);
-                }
-            }
-        });
+    pub fn new(stream: TcpStream) -> Result<Self, Error> {
+        let temp = stream.try_clone()?;
 
         Ok(Self {
-            rx: rx_outside,
-            tx: tx_outside,
+            reader: BufReader::new(stream),
+            writer: BufWriter::new(temp),
+
+            buffer: Vec::new()
         })
+    }
+}
+
+pub struct Server {
+    listener: TcpListener
+}
+
+impl Server {
+    pub fn listen(socket_addr: SocketAddrV4) -> Result<Self, Error> {
+        let listener = TcpListener::bind(socket_addr)?;
+        listener.set_nonblocking(true);
+
+        Ok(Self {
+            listener
+        })
+    }
+
+    pub fn accept(&self) -> Result<Client, Error> {
+        let Ok(stream) = self.listener.accept() else {
+            return Err(Error::NoIncoming)
+        };
+
+        Client::new(stream.0)
     }
 }

@@ -1,4 +1,4 @@
-use std::{fmt::Display, sync::mpsc::TryRecvError};
+use std::fmt::Display;
 
 
 #[derive(Debug)]
@@ -6,7 +6,7 @@ pub enum Error {
     Io(std::io::Error),
     Serde(serde_json::Error),
     Eframe(eframe::Error),
-    RecvError(TryRecvError),
+    NoIncoming,
 }
 
 impl From<std::io::Error> for Error {
@@ -27,19 +27,13 @@ impl From<eframe::Error> for Error {
     }
 }
 
-impl From<TryRecvError> for Error {
-    fn from(value: TryRecvError) -> Self {
-        Self::RecvError(value)
-    }
-}
-
 impl<'a> Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Io(e) => e.fmt(f),
             Error::Serde(e) => e.fmt(f),
             Error::Eframe(e) => e.fmt(f),
-            Error::RecvError(e) => e.fmt(f),
+            Error::NoIncoming => f.write_str("NoIncoming"),
         }
     }
 }
