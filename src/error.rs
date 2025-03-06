@@ -7,6 +7,7 @@ pub enum Error {
     Serde(serde_json::Error),
     Eframe(eframe::Error),
     RecvError(TryRecvError),
+    Rusqlite(rusqlite::Error),
 }
 
 impl From<std::io::Error> for Error {
@@ -33,6 +34,12 @@ impl From<TryRecvError> for Error {
     }
 }
 
+impl From<rusqlite::Error> for Error {
+    fn from(value: rusqlite::Error) -> Self {
+        Self::Rusqlite(value)
+    }
+}
+
 impl<'a> Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -40,6 +47,7 @@ impl<'a> Display for Error {
             Error::Serde(e) => e.fmt(f),
             Error::Eframe(e) => e.fmt(f),
             Error::RecvError(e) => e.fmt(f),
+            Error::Rusqlite(e) => e.fmt(f),
         }
     }
 }

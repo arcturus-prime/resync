@@ -3,7 +3,6 @@ mod net;
 mod ui;
 
 use std::{
-    collections::HashSet,
     net::{Ipv4Addr, SocketAddrV4},
     str::FromStr,
 };
@@ -12,7 +11,7 @@ use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use ui::{Project, ProjectKind};
+use ui::{Project, ProjectKind, ClipboardEntry};
 
 #[derive(PartialEq)]
 enum Focus {
@@ -24,7 +23,7 @@ struct App {
     tabs: Vec<Project>,
     current: usize,
 
-    clipboard: (usize, HashSet<usize>),
+    clipboard: Vec<ClipboardEntry>,
 
     ip_text: String,
     port_text: String,
@@ -38,7 +37,7 @@ impl Default for App {
             tabs: vec![],
             current: 0,
 
-            clipboard: (0, HashSet::new()),
+            clipboard: Vec::new(),
 
             ip_text: String::new(),
             port_text: String::new(),
@@ -151,19 +150,12 @@ impl eframe::App for App {
         }
 
         if ctx.input(|i| i.key_down(egui::Key::Copy)) {
-            self.clipboard.1 = self.tabs[self.current].selected.clone();
-            self.clipboard.0 = self.current;
+            self.clipboard.push(ClipboardEntry { project: self.current, ids: self.tabs[self.current].selected.clone(), tab: self.tabs[self.current].tab});
         }
 
         if ctx.input(|i| i.key_down(egui::Key::Paste)) {
-            for id in &self.clipboard.1 {
-                let pair = self.tabs[self.clipboard.0].get_object(*id);
-
-                let name = pair.0.clone();
-                let object = pair.1.clone();
-
-                self.tabs[self.current].add_object(name, object);
-            }
+            let _ = self.tabs[self.current].copy_from_others(&self.tabs, &self.clipboard);
+            self.clipboard.clear();
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {

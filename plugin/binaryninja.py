@@ -85,7 +85,7 @@ class Connection:
             objects.append(resync_func)
             names.append(name)
 
-        self.send({ "kind": "sync", "objects": objects, "names": names })
+        self.send({ "kind": "push", "objects": objects, "names": names })
 
     def fileno(self):
         return self.socket.fileno()

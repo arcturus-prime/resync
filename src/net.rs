@@ -84,10 +84,6 @@ pub enum Message {
         new: String,
     },
     Push {
-        name: String,
-        object: Object,
-    },
-    Sync {
         names: Vec<String>,
         objects: Vec<Object>,
     },
