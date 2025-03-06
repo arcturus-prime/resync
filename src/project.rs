@@ -96,21 +96,23 @@ impl Project {
         })
     }
 
+    fn update_with_message(&mut self, message: Message) {
+        match message {
+            Message::Delete { name } => {}
+            Message::Rename { old, new } => {}
+            Message::Push { name, object } => {}
+            Message::Sync { names, objects } => {
+                self.data.names = names;
+                self.data.objects = objects;
+            }
+        }
+    }
+
     pub fn update(&mut self, ui: &mut Ui) {
         if let ProjectKind::Remote(client) = &mut self.kind {
-            let Ok(message) = client.rx.try_recv() else {
-                return;
+            if let Ok(message) = client.rx.try_recv() {
+                self.update_with_message(message);
             };
-
-            match message {
-                Message::Delete { name } => {}
-                Message::Rename { old, new } => {}
-                Message::Push { name, object } => {}
-                Message::Sync { names, objects } => {
-                    self.data.names = names;
-                    self.data.objects = objects;
-                }
-            }
         }
 
         ui.columns(2, |ui| {

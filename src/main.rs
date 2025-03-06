@@ -1,6 +1,6 @@
 mod error;
 mod net;
-mod ui;
+mod project;
 
 use std::{
     collections::HashSet,
@@ -12,7 +12,7 @@ use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use ui::{Project, ProjectKind};
+use project::{Project, ProjectKind};
 
 #[derive(PartialEq)]
 enum Focus {
