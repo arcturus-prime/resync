@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use std::{
-    io::{BufRead, BufReader, BufWriter, Write},
-    net::{SocketAddrV4, TcpStream, TcpListener},
-    sync::{Arc, Mutex, mpsc::{self, Receiver, Sender}},
+    io::{BufRead, BufReader, Write},
+    net::{SocketAddrV4, TcpStream},
+    sync::mpsc::{self, Receiver},
 };
 
 use crate::error::Error;
@@ -71,7 +71,6 @@ pub enum Object {
         location: usize,
         global_type: String,
     },
-    Null
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

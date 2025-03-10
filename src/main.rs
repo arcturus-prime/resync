@@ -3,7 +3,6 @@ mod net;
 mod project;
 
 use std::{
-    collections::HashSet,
     net::{Ipv4Addr, SocketAddrV4},
     str::FromStr,
 };
@@ -12,7 +11,7 @@ use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use project::{Project, ProjectKind};
+use project::{Project, ProjectKind, ProjectData};
 
 #[derive(PartialEq)]
 enum Focus {
@@ -24,7 +23,7 @@ struct App {
     tabs: Vec<Project>,
     current: usize,
 
-    clipboard: (usize, HashSet<usize>),
+    clipboard: ProjectData,
 
     ip_text: String,
     port_text: String,
@@ -38,7 +37,7 @@ impl Default for App {
             tabs: vec![],
             current: 0,
 
-            clipboard: (0, HashSet::new()),
+            clipboard: ProjectData::new(),
 
             ip_text: String::new(),
             port_text: String::new(),
@@ -150,24 +149,24 @@ impl eframe::App for App {
             return;
         }
 
-        if ctx.input(|i| i.key_down(egui::Key::Copy)) {
-            self.clipboard.1 = self.tabs[self.current].selected.clone();
-            self.clipboard.0 = self.current;
+        if ctx.input(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::InputState::Key::C)))  {
+            println!("Copying!");
+            self.clipboard = self.tabs[self.current].get_selected();
         }
 
-        if ctx.input(|i| i.key_down(egui::Key::Paste)) {
-            for id in &self.clipboard.1 {
-                let pair = self.tabs[self.clipboard.0].get_object(*id);
-
-                let name = pair.0.clone();
-                let object = pair.1.clone();
-
-                self.tabs[self.current].add_object(name, object);
-            }
+        if ctx.input(|i| i.key_pressed(egui::Key::Paste)) {
+            println!("Pasting!");
+            self.tabs[self.current].add_objects(self.clipboard.clone());
         }
+
+        if ctx.input(|i| i.modifiers.ctrl && i.key_down(egui::Key::S)) {
+            self.tabs[self.current].save();
+        }
+
+        self.tabs[self.current].update();
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.tabs[self.current].update(ui);
+            self.tabs[self.current].render(ui);
         });
     }
 }

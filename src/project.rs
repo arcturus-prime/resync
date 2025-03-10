@@ -35,16 +35,16 @@ impl ProjectData {
     }
 
     pub fn save(&self, path: &Path) -> Result<(), Error> {
-        let mut transaction;
+        let mut file;
 
         if !path.exists() {
-            transaction = File::create(path)?;
+            file = File::create(path)?;
         } else {
-            transaction = OpenOptions::new().write(true).open(path)?;
+            file = OpenOptions::new().write(true).open(path)?;
         }
 
         let data = serde_json::to_vec_pretty(&self.objects)?;
-        transaction.write(&data)?;
+        file.write(&data)?;
 
         Ok(())
     }
@@ -58,8 +58,7 @@ pub enum ProjectKind {
 pub struct Project {
     pub name: String,
 
-    pub selected: HashSet<usize>,
-
+    selected: HashSet<usize>,
     lookup: HashMap<String, usize>,
 
     kind: ProjectKind,
@@ -71,7 +70,7 @@ impl Project {
         let mut lookup = HashMap::new();
 
         let data = match &kind {
-            ProjectKind::Remote(client) => ProjectData::new(),
+            ProjectKind::Remote(_) => ProjectData::new(),
             ProjectKind::Local(path) => {
                 let data = if path.exists() {
                     ProjectData::open(&path)?
@@ -96,7 +95,23 @@ impl Project {
         })
     }
 
-    fn update_with_message(&mut self, message: Message) {
+    pub fn save(&self) {
+        //TODO: Handle this error using GUI
+        let result = match &self.kind {
+            ProjectKind::Local(path) => self.data.save(&path),
+            ProjectKind::Remote(_) => Ok(()),
+        };
+    }
+
+    pub fn update(&mut self) {
+        let ProjectKind::Remote(client) = &mut self.kind else {
+            return
+        };
+
+        let Ok(message) = client.rx.try_recv() else {
+            return
+        };
+
         match message {
             Message::Delete { name } => {}
             Message::Rename { old, new } => {}
@@ -108,13 +123,7 @@ impl Project {
         }
     }
 
-    pub fn update(&mut self, ui: &mut Ui) {
-        if let ProjectKind::Remote(client) = &mut self.kind {
-            if let Ok(message) = client.rx.try_recv() {
-                self.update_with_message(message);
-            };
-        }
-
+    pub fn render(&mut self, ui: &mut Ui) {
         ui.columns(2, |ui| {
             let text_style = ui[0].text_style_height(&egui::TextStyle::Body);
 
@@ -138,9 +147,43 @@ impl Project {
         });
     }
 
+    pub fn get_selected(&self) -> ProjectData {
+        let mut data = ProjectData::new();
+
+        for id in &self.selected {
+            data.objects.push(self.data.objects[*id].clone());
+            data.names.push(self.data.names[*id].clone());
+        }
+
+        data
+    }
+
+    pub fn add_objects(&mut self, data: ProjectData) {
+        for id in 0..data.objects.len() {
+            let name = data.names[id].clone();
+            let object = data.objects[id].clone();
+
+            self.add_object(name, object);
+        }
+    }
+
     pub fn add_object(&mut self, name: String, object: Object) {
-        self.data.objects.push(object);
-        self.data.names.push(name);
+        if let ProjectKind::Remote(client) = &mut self.kind {
+            let _ = client.tx.send(Message::Push {
+                name: name.clone(),
+                object: object.clone()
+            });
+        }
+
+        if let Some(id) = self.lookup.get(&name) {
+            self.data.names[*id] = name;
+            self.data.objects[*id] = object;
+        } else {
+            self.lookup.insert(name.clone(), self.data.objects.len());
+
+            self.data.objects.push(object);
+            self.data.names.push(name);
+        }
     }
 
     pub fn get_object(&self, id: usize) -> (&String, &Object) {
