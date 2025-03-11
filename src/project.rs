@@ -145,9 +145,11 @@ impl Project {
                     }
                 },
             );
+           
         });
     }
-
+    // Get all objects that are selected at the moment in the project listing
+    // (used for copying to clipboard)
     pub fn get_selected(&self) -> ProjectData {
         let mut data = ProjectData::new();
 
@@ -159,6 +161,9 @@ impl Project {
         data
     }
 
+    // Adds objects to the project (used for pasting)
+    //
+    // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: ProjectData) {
         for id in 0..data.objects.len() {
             let name = data.names[id].clone();
