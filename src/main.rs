@@ -60,8 +60,12 @@ impl App {
             };
             let filename = filename.to_string_lossy().to_string();
 
-            let Ok(project) = Project::new(ProjectKind::Local(file), filename) else {
-                return;
+            let project = match Project::new(ProjectKind::Local(file), filename) {
+                Ok(project) => project,
+                Err(e) => {
+                    println!("{e}");
+                    return
+                },
             };
 
             self.tabs.push(project);
@@ -149,17 +153,17 @@ impl eframe::App for App {
             return;
         }
 
-        if ctx.input(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::InputState::Key::C)))  {
-            println!("Copying!");
+        // TODO: Figure out how egui is supposed to intercept copy and paste shortcuts, because it
+        // doesn't work how'd you expect
+        if ctx.input(|i| i.key_released(egui::Key::C))  {
             self.clipboard = self.tabs[self.current].get_selected();
         }
 
-        if ctx.input(|i| i.key_pressed(egui::Key::Paste)) {
-            println!("Pasting!");
+        if ctx.input(|i| i.key_released(egui::Key::V)) {
             self.tabs[self.current].add_objects(self.clipboard.clone());
         }
 
-        if ctx.input(|i| i.modifiers.ctrl && i.key_down(egui::Key::S)) {
+        if ctx.input(|i| i.modifiers.ctrl && i.key_released(egui::Key::S)) {
             self.tabs[self.current].save();
         }
 

@@ -43,7 +43,7 @@ impl ProjectData {
             file = OpenOptions::new().write(true).open(path)?;
         }
 
-        let data = serde_json::to_vec_pretty(&self.objects)?;
+        let data = serde_json::to_vec(&self)?;
         file.write(&data)?;
 
         Ok(())
@@ -112,6 +112,7 @@ impl Project {
             return
         };
 
+        //TODO: Implement the rest of the network protocol
         match message {
             Message::Delete { name } => {}
             Message::Rename { old, new } => {}

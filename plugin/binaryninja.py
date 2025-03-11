@@ -118,7 +118,7 @@ class DecompilerHandler(BinaryDataNotification):
 
 class NetworkHandler(BackgroundTaskThread):
     def __init__(self, socket: socket.socket):
-        super(NetworkHandler, self).__init__('Handling requests from resync...', True)
+        super().__init__('Handling requests from resync...')
 
         self.server = socket
         self.connections = [ socket ]
@@ -126,12 +126,8 @@ class NetworkHandler(BackgroundTaskThread):
     def handle_message(self, message):
         print(message) 
 
-    def cancel(self):
-        for connection in self.connections:
-            connections.close()
-
     def run(self):
-        while True:
+        while core:
             read, write, error = select.select(self.connections, [], [])
 
             for connection in read:
@@ -151,6 +147,8 @@ class NetworkHandler(BackgroundTaskThread):
                      
                     self.handle_message(data)
 
+        for connection in self.connections:
+            connection.close()
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(('127.0.0.1', PORT_NUMBER))
