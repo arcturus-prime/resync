@@ -116,10 +116,9 @@ impl Project {
         match message {
             Message::Delete { name } => {}
             Message::Rename { old, new } => {}
-            Message::Push { name, object } => {}
-            Message::Sync { names, objects } => {
-                self.data.names = names;
-                self.data.objects = objects;
+            Message::Push { mut names, mut objects } => {
+                self.data.names.append(&mut names);
+                self.data.objects.append(&mut objects);
             }
         }
     }
@@ -165,34 +164,26 @@ impl Project {
     //
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: ProjectData) {
-        for id in 0..data.objects.len() {
-            let name = data.names[id].clone();
-            let object = data.objects[id].clone();
+        for i in 0..data.objects.len() {
+            let name = data.names[i].clone();
+            let object = data.objects[i].clone();
 
-            self.add_object(name, object);
+            if let Some(id) = self.lookup.get(&name) {
+                self.data.names[*id] = name;
+                self.data.objects[*id] = object;
+            } else {
+                self.lookup.insert(name.clone(), self.data.objects.len());
+
+                self.data.objects.push(object);
+                self.data.names.push(name);
+            }
         }
-    }
 
-    pub fn add_object(&mut self, name: String, object: Object) {
         if let ProjectKind::Remote(client) = &mut self.kind {
             let _ = client.tx.send(Message::Push {
-                name: name.clone(),
-                object: object.clone()
+                names: data.names,
+                objects: data.objects
             });
         }
-
-        if let Some(id) = self.lookup.get(&name) {
-            self.data.names[*id] = name;
-            self.data.objects[*id] = object;
-        } else {
-            self.lookup.insert(name.clone(), self.data.objects.len());
-
-            self.data.objects.push(object);
-            self.data.names.push(name);
-        }
-    }
-
-    pub fn get_object(&self, id: usize) -> (&String, &Object) {
-        (&self.data.names[id], &self.data.objects[id])
     }
 }

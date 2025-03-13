@@ -85,10 +85,6 @@ pub enum Message {
         new: String,
     },
     Push {
-        name: String,
-        object: Object,
-    },
-    Sync {
         names: Vec<String>,
         objects: Vec<Object>,
     },
@@ -110,6 +106,8 @@ impl Client {
         let (tx_outside, rx_inside): (mpsc::Sender<Message>, Receiver<Message>) = mpsc::channel();
 
         std::thread::spawn(move || loop {
+            buffer.clear();
+
             if let Err(e) = reader.read_until(b'\n', &mut buffer) {
                 log::error!("Error reading from stream: {}", e);
                 continue;
