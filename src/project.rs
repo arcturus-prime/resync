@@ -1,26 +1,27 @@
 use std::{
     collections::{HashMap, HashSet},
-    path::{Path, PathBuf},
     fs::{File, OpenOptions},
     io::{Read, Write},
+    path::{Path, PathBuf},
 };
 
 use eframe::egui::{self, Ui};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use crate::{error::Error, net::{Client, Message, Object}};
+use crate::{
+    error::Error,
+    net::{Client, Message, Object},
+};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ProjectData {
     pub objects: Vec<Object>,
-    pub names: Vec<String>,
 }
 
 impl ProjectData {
     pub fn new() -> Self {
         Self {
             objects: Vec::new(),
-            names: Vec::new(),
         }
     }
 
@@ -44,7 +45,7 @@ impl ProjectData {
         }
 
         let data = serde_json::to_vec(&self)?;
-        file.write(&data)?;
+        file.write_all(&data)?;
 
         Ok(())
     }
@@ -78,12 +79,12 @@ impl Project {
                     ProjectData::new()
                 };
 
-                for (id, name) in data.names.iter().enumerate() {
-                    lookup.insert(name.to_string(), id);
+                for (id, object) in data.objects.iter().enumerate() {
+                    lookup.insert(object.name.to_string(), id);
                 }
 
                 data
-            },
+            }
         };
 
         Ok(Self {
@@ -103,26 +104,56 @@ impl Project {
         };
     }
 
+    // call to update the state of the project and perform state changes
     pub fn update(&mut self) {
         let ProjectKind::Remote(client) = &mut self.kind else {
-            return
+            return;
         };
 
         let Ok(message) = client.rx.try_recv() else {
-            return
+            return;
         };
 
         //TODO: Implement the rest of the network protocol
         match message {
-            Message::Delete { name } => {}
-            Message::Rename { old, new } => {}
-            Message::Push { mut names, mut objects } => {
-                self.data.names.append(&mut names);
+            Message::Delete { name } => {
+                let index = match self.lookup.get(&name) {
+                    Some(index) => *index,
+                    None => {
+                        log::error!("Received delete message for object that does not exist in project: {}", name);
+                        return
+                    }
+                };
+               
+                let last = self.data.objects.len() - 1;
+                if index != last {
+                    self.data.objects.swap(index, last);
+                    self.data.objects.pop();
+                }
+               
+                self.lookup.insert(self.data.objects[index].name.clone(), index);
+                self.lookup.remove(&name);
+            }
+            Message::Rename { old, new } => {
+                let index = match self.lookup.get(&old) {
+                    Some(index) => *index,
+                    None => {
+                        log::error!("Received rename message for object that does not exist in project: {}", old);
+                        return
+                    }
+                };
+               
+                self.data.objects[index].name = new.clone();
+                self.lookup.remove(&old);
+                self.lookup.insert(new, index);
+            }
+            Message::Push { mut objects } => {
                 self.data.objects.append(&mut objects);
             }
         }
     }
 
+    // call to render the project to the UI
     pub fn render(&mut self, ui: &mut Ui) {
         ui.columns(2, |ui| {
             let text_style = ui[0].text_style_height(&egui::TextStyle::Body);
@@ -130,11 +161,11 @@ impl Project {
             egui::ScrollArea::vertical().show_rows(
                 &mut ui[0],
                 text_style,
-                self.data.names.len(),
+                self.data.objects.len(),
                 |ui, row_range| {
                     for i in row_range {
                         let selected = self.selected.contains(&i);
-                        let label = ui.selectable_label(selected, &self.data.names[i]);
+                        let label = ui.selectable_label(selected, &self.data.objects[i].name);
 
                         if label.clicked() && selected {
                             self.selected.remove(&i);
@@ -144,7 +175,6 @@ impl Project {
                     }
                 },
             );
-           
         });
     }
     // Get all objects that are selected at the moment in the project listing
@@ -154,35 +184,30 @@ impl Project {
 
         for id in &self.selected {
             data.objects.push(self.data.objects[*id].clone());
-            data.names.push(self.data.names[*id].clone());
         }
 
         data
     }
 
     // Adds objects to the project (used for pasting)
-    //
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: ProjectData) {
         for i in 0..data.objects.len() {
-            let name = data.names[i].clone();
             let object = data.objects[i].clone();
 
-            if let Some(id) = self.lookup.get(&name) {
-                self.data.names[*id] = name;
+            if let Some(id) = self.lookup.get(&object.name) {
                 self.data.objects[*id] = object;
             } else {
-                self.lookup.insert(name.clone(), self.data.objects.len());
+                self.lookup
+                    .insert(object.name.clone(), self.data.objects.len());
 
                 self.data.objects.push(object);
-                self.data.names.push(name);
             }
         }
 
         if let ProjectKind::Remote(client) = &mut self.kind {
             let _ = client.tx.send(Message::Push {
-                names: data.names,
-                objects: data.objects
+                objects: data.objects,
             });
         }
     }

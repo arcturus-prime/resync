@@ -11,7 +11,7 @@ use eframe::egui::{self, Ui};
 use net::Client;
 use rfd::FileDialog;
 
-use project::{Project, ProjectKind, ProjectData};
+use project::{Project, ProjectData, ProjectKind};
 
 #[derive(PartialEq)]
 enum Focus {
@@ -64,8 +64,8 @@ impl App {
                 Ok(project) => project,
                 Err(e) => {
                     println!("{e}");
-                    return
-                },
+                    return;
+                }
             };
 
             self.tabs.push(project);
@@ -84,7 +84,7 @@ impl App {
                 return;
             };
             let filename = filename.to_string_lossy().to_string();
-            
+
             let Ok(project) = Project::new(ProjectKind::Local(file), filename) else {
                 return;
             };
@@ -149,13 +149,13 @@ impl eframe::App for App {
                 .show(ctx, |ui| self.handle_add_project_window(ui));
         }
 
-        if self.tabs.len() == 0 {
+        if self.tabs.is_empty() {
             return;
         }
 
         // TODO: Figure out how egui is supposed to intercept copy and paste shortcuts, because it
         // doesn't work how'd you expect (on Linux at least)
-        if ctx.input(|i| i.key_released(egui::Key::C))  {
+        if ctx.input(|i| i.key_released(egui::Key::C)) {
             self.clipboard = self.tabs[self.current].get_selected();
         }
 

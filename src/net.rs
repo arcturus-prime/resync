@@ -56,10 +56,12 @@ pub enum TypeInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
-pub enum Object {
+pub enum ObjectInfo {
     Type {
         size: usize,
         alignment: usize,
+
+        #[serde(flatten)]
         info: TypeInfo,
     },
     Function {
@@ -73,21 +75,21 @@ pub enum Object {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Object {
+    pub name: String,
+
+    #[serde(flatten)]
+    pub info: ObjectInfo,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
-    Delete {
-        name: String,
-    },
-    Rename {
-        old: String,
-        new: String,
-    },
-    Push {
-        names: Vec<String>,
-        objects: Vec<Object>,
-    },
+    Delete { name: String },
+    Rename { old: String, new: String },
+    Push { objects: Vec<Object> },
 }
 
 pub struct Client {
