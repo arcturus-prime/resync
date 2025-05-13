@@ -35,17 +35,18 @@ def lift_function(func):
         )
     
     binal_func = {
+        "name": func.name,
         "kind": "function",
         "location": func.start,
         "return_type": func.return_type.get_string(),
         "arguments": arguments,
     }
 
-    return binal_func, func.name
+    return binal_func
 
 
 def lift_type(type_):
-    binal_type = {"kind": "type", "size": type_.width, "alignment": type_.alignment}
+    binal_type = {"kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment}
     binal_type["info"] = {}
 
     if type_.type_class == TypeClass.PointerTypeClass:
@@ -53,11 +54,11 @@ def lift_type(type_):
 
         ptr_base_type, binal_type["info"]["depth"] = get_pointer_info(type_)
         binal_type["info"]["to_type"] = ptr_base_type.get_string()
+    else:
+        # TODO: Handle other types properly
+        binal_type["info"]["kind"] = "uint"
 
-    # TODO: Handle other types properly
-    binal_type["info"]["kind"] = "uint"
-
-    return binal_type, type_.get_string()
+    return binal_type
 
 
 def lift_global(global_):
@@ -153,16 +154,16 @@ class DecompilerHandler(BinaryDataNotification):
 # Handles connecting Resync clients, receiving updates from clients, and pushing updates to clients
 class NetworkHandler(BackgroundTaskThread):
     def __init__(self, socket: socket.socket):
-        super().__init__("Handling requests from resync...", True)
+        super().__init__("Handling requests from Binal...", True)
 
-        self.connections = [Connection(socket)]
+        self.connections = [socket]
         self.notifications = {}
 
-    def sync_objects(self, connection: Connection, objects: Iterable):
+    def sync_objects(self, connection: Connection, object_iter: Iterable):
         objects = []
 
-        for index, pair in enumerate(objects):
-            objects.append(pair[0])
+        for index, obj in enumerate(object_iter):
+            objects.append(obj)
 
             if index != 0 and index % INIT_SYNC_BATCH == 0:
                 connection.send({"kind": "push", "objects": objects})
@@ -219,7 +220,6 @@ class NetworkHandler(BackgroundTaskThread):
                 bv.unregister_notification(self.notifications[connection])
 
             connection.close()
-
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("127.0.0.1", PORT_NUMBER))

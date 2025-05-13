@@ -60,8 +60,6 @@ pub enum ObjectInfo {
     Type {
         size: usize,
         alignment: usize,
-
-        #[serde(flatten)]
         info: TypeInfo,
     },
     Function {
