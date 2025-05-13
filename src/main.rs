@@ -155,11 +155,11 @@ impl eframe::App for App {
 
         // TODO: Figure out how egui is supposed to intercept copy and paste shortcuts, because it
         // doesn't work how'd you expect (on Linux at least)
-        if ctx.input(|i| i.key_released(egui::Key::C)) {
+        if ctx.input(|i| i.key_released(egui::Key::Copy)) {
             self.clipboard = self.tabs[self.current].get_selected();
         }
 
-        if ctx.input(|i| i.key_released(egui::Key::V)) {
+        if ctx.input(|i| i.key_released(egui::Key::Paste)) {
             self.tabs[self.current].add_objects(self.clipboard.clone());
         }
 

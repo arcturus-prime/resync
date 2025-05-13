@@ -86,11 +86,10 @@ def add_and_lower_type(type_):
 
 def add_and_lower_function(function):
     func = bv.create_user_function(function["address"])
-    func.name = function["name"]
+    func.name = function.name
     
     # creation of return type
     func.return_type
-
 
 class Connection:
     def __init__(self, socket: socket.socket):
@@ -151,9 +150,10 @@ class DecompilerHandler(BinaryDataNotification):
         pass
 
 
+# Handles connecting Resync clients, receiving updates from clients, and pushing updates to clients
 class NetworkHandler(BackgroundTaskThread):
     def __init__(self, socket: socket.socket):
-        super().__init__("Handling requests from Binal...", True)
+        super().__init__("Handling requests from resync...", True)
 
         self.connections = [Connection(socket)]
         self.notifications = {}

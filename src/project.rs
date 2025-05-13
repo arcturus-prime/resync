@@ -104,7 +104,7 @@ impl Project {
         };
     }
 
-    // call to update the state of the project and perform state changes
+    // call to update the state of the project
     pub fn update(&mut self) {
         let ProjectKind::Remote(client) = &mut self.kind else {
             return;
@@ -177,6 +177,7 @@ impl Project {
             );
         });
     }
+
     // Get all objects that are selected at the moment in the project listing
     // (used for copying to clipboard)
     pub fn get_selected(&self) -> ProjectData {
