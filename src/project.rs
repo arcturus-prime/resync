@@ -104,8 +104,8 @@ impl Project {
         };
     }
 
-    // call to update the state of the project
-    pub fn update(&mut self) {
+    // call to handle any incoming network requests and update the project
+    pub fn handle_network_updates(&mut self) {
         let ProjectKind::Remote(client) = &mut self.kind else {
             return;
         };
@@ -114,7 +114,6 @@ impl Project {
             return;
         };
 
-        //TODO: Implement the rest of the network protocol
         match message {
             Message::Delete { name } => {
                 let index = match self.lookup.get(&name) {
@@ -153,8 +152,12 @@ impl Project {
         }
     }
 
-    // call to render the project to the UI
+    // call to render the project to the UI and update the project state
     pub fn render(&mut self, ui: &mut Ui) {
+        if ui.input(|i| i.key_released(egui::Key::Escape)) {
+            self.selected.clear()
+        }
+
         ui.columns(2, |ui| {
             let text_style = ui[0].text_style_height(&egui::TextStyle::Body);
 

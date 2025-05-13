@@ -97,16 +97,16 @@ impl App {
         ui.add_space(15.0);
 
         let ip_label = ui.label("IP Address:");
-        ui.text_edit_singleline(&mut self.ip_text)
+        ui.add(egui::TextEdit::singleline(&mut self.ip_text).hint_text("127.0.0.1"))
             .labelled_by(ip_label.id);
 
         let port_label = ui.label("Port:");
-        ui.text_edit_singleline(&mut self.port_text)
+        ui.add(egui::TextEdit::singleline(&mut self.port_text).hint_text("12007"))
             .labelled_by(port_label.id);
 
         if ui.button("Connect").clicked() {
-            let ip = Ipv4Addr::from_str(&self.ip_text).unwrap();
-            let port = u16::from_str(&self.port_text).unwrap();
+            let ip = Ipv4Addr::from_str(&self.ip_text).unwrap_or(Ipv4Addr::new(127, 0, 0, 1));
+            let port = u16::from_str(&self.port_text).unwrap_or(12007);
 
             let Ok(client) = Client::connect(SocketAddrV4::new(ip, port)) else {
                 return;
@@ -153,7 +153,6 @@ impl eframe::App for App {
             return;
         }
 
-
         if ctx.input(|i| i.events.iter().any(|ev| matches!(ev, egui::Event::Copy))) {
             self.clipboard = self.tabs[self.current].get_selected();
         }
@@ -166,7 +165,7 @@ impl eframe::App for App {
             self.tabs[self.current].save();
         }
 
-        self.tabs[self.current].update();
+        self.tabs[self.current].handle_network_updates();
 
         egui::CentralPanel::default().show(ctx, |ui| {
             self.tabs[self.current].render(ui);
