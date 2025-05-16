@@ -45,20 +45,48 @@ def lift_function(func):
     return binal_func
 
 
-def lift_type(type_):
-    binal_type = {"kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment}
-    binal_type["info"] = {}
+def lift_types(type_):
+    binal_types = [{"kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment}]
 
     if type_.type_class == TypeClass.PointerTypeClass:
-        binal_type["info"]["kind"] = "pointer"
+        binal_types[0]["info"] = { "kind": "pointer" }
 
-        ptr_base_type, binal_type["info"]["depth"] = get_pointer_info(type_)
-        binal_type["info"]["to_type"] = ptr_base_type.get_string()
+        ptr_base_type, binal_types[0]["info"]["depth"] = get_pointer_info(type_)
+        binal_types[0]["info"]["to_type"] = ptr_base_type.get_string()
+    elif type_.type_class == TypeClass.IntegerTypeClass:
+        binal_types[0]["info"] = { "kind": "int" if type_.signed else "uint" } 
+    elif type_.type_class == TypeClass.BoolTypeClass:
+        binal_types[0]["info"] = { "kind": "bool" }
+    elif type_.type_class == TypeClass.FloatTypeClass:
+        binal_types[0]["info"] = { "kind": "float" }
+    elif type_.type_class == TypeClass.EnumerationTypeClass:
+        binal_types[0]["info"] = { "kind": "enum", "values": [] }
+        
+        for member in type_.members:
+            binal_types[0]["info"]["values"].append({
+                "name": member.name,
+                "value": member.value
+            })
+
+    elif type_.type_class == TypeClass.StructureTypeClass:
+        binal_types[0]["info"] = { "kind": "struct", "fields": [] }
+   
+        for field in type_.members:
+            binal_types.extend(lift_types(field.type))
+            binal_types[0]["info"]["fields"].append({
+                "name": field.name,
+                "offset": field.offset,
+                "field_type": field.type.get_string()
+            })
+
+    elif type_.type_class == TypeClass.VoidTypeClass:
+        binal_types[0]["info"] = { "kind": "void" }
+    elif type_.type_class == TypeClass.ArrayTypeClass:
+        binal_types[0]["info"] = { "kind": "array", "item_type": type_.element_type.get_string(), "size": type_.count }
     else:
-        # TODO: Handle other types properly
-        binal_type["info"]["kind"] = "uint"
+        binal_types[0]["info"] = { "kind": "unknown" }
 
-    return binal_type
+    return binal_types
 
 
 def lift_global(global_):
@@ -71,17 +99,17 @@ def add_and_lower_type(type_):
     #TODO: Implement lowering for all types
     if kind == "pointer":
         pass
-    if kind == "uint":
+    elif kind == "uint":
         pass
-    if kind == "int":
+    elif kind == "int":
         pass
-    if kind == "float":
+    elif kind == "float":
         pass
-    if kind == "struct":
+    elif kind == "struct":
         pass
-    if kind == "enum":
+    elif kind == "enum":
         pass
-    if kind == "array":
+    elif kind == "array":
         pass
 
 
@@ -172,7 +200,7 @@ class NetworkHandler(BackgroundTaskThread):
         connection.send({"kind": "push", "objects": objects})
 
     def init_connection(self, connection: Connection):
-        self.sync_objects(connection, map(lift_type, bv.types.values()))
+        self.sync_objects(connection, (type_ for type_group in map(lift_types, bv.types.values()) for type_ in type_group))
         self.sync_objects(connection, map(lift_function, bv.functions))
 
         notify = DecompilerHandler(connection)
