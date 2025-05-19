@@ -42,10 +42,23 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                for (tab, i) in self.projects.iter().zip(0..) {
-                    if ui.button(&tab.name).clicked() {
-                        self.current = i;
-                    }
+                let mut remove: Option<usize> = None;
+
+                for i in 0..self.projects.len() {
+                    egui::Frame::default().inner_margin(1.0).fill(egui::Color32::from_gray(230)).show(ui, |ui| {
+                        if ui.button(&self.projects[i].name).clicked() {
+                            self.current = i;
+                        }
+
+                        if ui.button("X").clicked() {
+                            remove = Some(i);
+                        }
+                    });
+                }
+
+                if let Some(i) = remove {
+                    self.projects.remove(i);
+                    self.current = if i == 0 { 0 } else { i - 1 };
                 }
 
                 if ui.button("+").clicked() {

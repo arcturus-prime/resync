@@ -6,8 +6,6 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::error::Error;
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct EnumValue {
     pub name: String,
@@ -96,7 +94,7 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn connect(socket_addr: SocketAddrV4) -> Result<Self, Error> {
+    pub fn connect(socket_addr: SocketAddrV4) -> std::io::Result<Self> {
         let stream = TcpStream::connect(socket_addr)?;
 
         let mut reader = BufReader::new(stream.try_clone()?);

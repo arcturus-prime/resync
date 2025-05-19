@@ -8,6 +8,7 @@ use std::{
 
 use crate::net::Object;
 
+#[derive(Debug)]
 pub enum DatabaseError {
     Io(std::io::Error),
     Serde(serde_json::Error),

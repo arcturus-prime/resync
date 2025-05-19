@@ -123,7 +123,7 @@ pub enum ProjectKind {
 pub struct Project {
     pub name: String,
 
-    selected: HashSet<usize>,
+    selected: HashSet<String>,
 
     kind: ProjectKind,
     data: Database,
@@ -131,8 +131,6 @@ pub struct Project {
 
 impl Project {
     pub fn create(kind: ProjectKind, name: String) -> Result<Self, DatabaseError> {
-        let mut lookup = HashMap::new();
-
         let data = match &kind {
             ProjectKind::Remote(_) => Database::new(),
             ProjectKind::Local(path) => {
@@ -168,8 +166,8 @@ impl Project {
     pub fn get_selected(&self) -> Vec<Object> {
         let mut data = Vec::new();
 
-        for id in &self.selected {
-            data.push(self.data.objects[*id].clone());
+        for name in &self.selected {
+            data.push(self.data.get(&name).unwrap());
         }
 
         data
@@ -205,14 +203,16 @@ impl<'a> Widget<'a> for Project {
                 text_style,
                 self.data.len(),
                 |ui, row_range| {
-                    for i in row_range {
-                        let selected = self.selected.contains(&i);
-                        let label = ui.selectable_label(selected, self.data.name_iter().skip(i).next().unwrap());
+                    let names = self.data.name_iter().skip(row_range.start).take(row_range.count());
+                    
+                    for name in names {
+                        let selected = self.selected.contains(name);
+                        let label = ui.selectable_label(selected, name);
 
                         if label.clicked() && selected {
-                            self.selected.remove(&i);
+                            self.selected.remove(name);
                         } else if label.clicked() && !selected {
-                            self.selected.insert(i);
+                            self.selected.insert(name.clone());
                         }
                     }
                 },
