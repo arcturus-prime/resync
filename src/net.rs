@@ -29,6 +29,9 @@ pub struct StructField {
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
+    Typedef {
+        alias_type: String,
+    },
     Pointer {
         to_type: String,
         depth: usize,

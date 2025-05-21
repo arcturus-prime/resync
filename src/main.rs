@@ -113,7 +113,7 @@ impl eframe::App for App {
         });
 
         if ctx.input(|i| i.modifiers.ctrl && i.key_released(egui::Key::S)) {
-            self.projects[self.current].save();
+            self.projects[self.current].save(&mut self.errors);
         }
     }
 }

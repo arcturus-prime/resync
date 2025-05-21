@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashSet, VecDeque},
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
     str::FromStr,
@@ -140,7 +140,6 @@ impl Project {
                     Database::new()
                 };
 
-
                 data
             }
         };
@@ -153,12 +152,16 @@ impl Project {
         })
     }
 
-    pub fn save(&self) {
+    pub fn save(&self, errors: &mut VecDeque<String>) {
         //TODO: Handle this error using GUI
         let result = match &self.kind {
             ProjectKind::Local(path) => self.data.save(&path),
             ProjectKind::Remote(_) => Ok(()),
         };
+
+        let Err(e) = result else { return };
+
+        errors.push_back(format!("Could not save project: {}", e))
     }
 
     // Get all objects that are selected at the moment in the project listing
@@ -176,6 +179,9 @@ impl Project {
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: Vec<Object>) {
+        for object in &data {
+            self.data.push(object.clone())
+        }
 
         if let ProjectKind::Remote(client) = &mut self.kind {
             let _ = client.tx.send(Message::Push { objects: data });
@@ -203,8 +209,12 @@ impl<'a> Widget<'a> for Project {
                 text_style,
                 self.data.len(),
                 |ui, row_range| {
-                    let names = self.data.name_iter().skip(row_range.start).take(row_range.count());
-                    
+                    let names = self
+                        .data
+                        .name_iter()
+                        .skip(row_range.start)
+                        .take(row_range.count());
+
                     for name in names {
                         let selected = self.selected.contains(name);
                         let label = ui.selectable_label(selected, name);
@@ -219,28 +229,34 @@ impl<'a> Widget<'a> for Project {
             );
         });
 
-        let ProjectKind::Remote(client) = &mut self.kind else {
-            return;
-        };
+        loop {
+            let ProjectKind::Remote(client) = &mut self.kind else {
+                return;
+            };
 
-        let Ok(message) = client.rx.try_recv() else {
-            return;
-        };
+            let Ok(message) = client.rx.try_recv() else {
+                return;
+            };
 
-        match message {
-            Message::Delete { name } => {
-                if let Err(e) = self.data.delete(&name) {
-                    state.errors.push_back(format!("Delete message failed: {}", e));
+            match message {
+                Message::Delete { name } => {
+                    if let Err(e) = self.data.delete(&name) {
+                        state
+                            .errors
+                            .push_back(format!("Delete message failed: {}", e));
+                    }
                 }
-            }
-            Message::Rename { old, new } => {
-                if let Err(e) = self.data.rename(&old, new) {
-                    state.errors.push_back(format!("Rename message failed: {}", e));
+                Message::Rename { old, new } => {
+                    if let Err(e) = self.data.rename(&old, new) {
+                        state
+                            .errors
+                            .push_back(format!("Rename message failed: {}", e));
+                    }
                 }
-            }
-            Message::Push { objects } => {
-                for object in objects {
-                    self.data.push(object)
+                Message::Push { objects } => {
+                    for object in objects {
+                        self.data.push(object)
+                    }
                 }
             }
         }
