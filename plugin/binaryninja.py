@@ -1,6 +1,7 @@
 import json
 import socket
 import select
+import traceback
 
 from binaryninja import (
     TypeClass,
@@ -20,8 +21,8 @@ INIT_SYNC_BATCH = 50
 
 def get_pointer_info(type_):
     depth = 0
-    while type_.children[0].type_class == TypeClass.PointerTypeClass:
-        type_ = type_.children[0]
+    while type_.type_class == TypeClass.PointerTypeClass:
+        type_ = type_.target
         depth += 1
 
     return type_, depth
@@ -33,33 +34,33 @@ def lift_function(func):
     arguments = []
     for parameter in func.type.parameters:
         arguments.append(
-            {"name": parameter.name, "arg_type": str(parameter.type.name)}
+            {"name": parameter.name, "arg_type": parameter.type.altname}
         )
 
-        binal_objects.extend(lift_types(parameter))
+        binal_objects.extend(lift_type(parameter.type))
     
     binal_func = {
-        "name": func.name,
         "kind": "function",
+        "name": func.name,
         "location": func.start,
-        "return_type": str(func.return_type.name),
+        "return_type": func.return_type.altname,
         "arguments": arguments,
     }
 
     binal_objects.append(binal_func)
 
-    return binal_func
+    return binal_objects
 
 
 def lift_type(type_: Type):
-    binal_types = [{"kind": "type", "name": str(type_.name), "size": type_.width, "alignment": type_.alignment}]
+    binal_types = [{"kind": "type", "name": type_.altname or type_.get_string(), "size": type_.width, "alignment": type_.alignment}]
 
     if type_.type_class == TypeClass.PointerTypeClass:
         binal_types[0]["info"] = { "kind": "pointer" }
 
         ptr_base_type, binal_types[0]["info"]["depth"] = get_pointer_info(type_)
 
-        binal_types[0]["info"]["to_type"] = str(ptr_base_type.name)
+        binal_types[0]["info"]["to_type"] = ptr_base_type.altname
         binal_types.extend(lift_type(ptr_base_type))
 
     elif type_.type_class == TypeClass.IntegerTypeClass:
@@ -81,19 +82,21 @@ def lift_type(type_: Type):
         binal_types[0]["info"] = { "kind": "struct", "fields": [] }
    
         for field in type_.members:
-            binal_types.extend(lift_types(field.type))
+            binal_types.extend(lift_type(field.type))
             binal_types[0]["info"]["fields"].append({
                 "name": field.name,
                 "offset": field.offset,
-                "field_type": str(field.type.name)
+                "field_type": field.type.altname
             })
 
     elif type_.type_class == TypeClass.VoidTypeClass:
         binal_types[0]["info"] = { "kind": "void" }
     elif type_.type_class == TypeClass.ArrayTypeClass:
-        binal_types.extend(lift_types(type_.element_type))
-        binal_types[0]["info"] = { "kind": "array", "item_type": str(type_.element_type.name), "size": type_.count }
-        
+        binal_types.extend(lift_type(type_.element_type))
+        binal_types[0]["info"] = { "kind": "array", "item_type": type_.element_type.altname, "size": type_.count }
+    else:
+        binal_types[0]["info"] = { "kind": "void" }
+
     return binal_types
 
 def lift_global(global_):
@@ -238,7 +241,7 @@ class NetworkHandler(BackgroundTaskThread):
 
     def init_connection(self, connection: Connection):
         self.sync_objects(connection, (type_ for type_group in map(lift_type, bv.types.values()) for type_ in type_group))
-        self.sync_objects(connection, (obj for obj_group in map(lift_function, bv.functions.values()) for obj in obj_group))
+        self.sync_objects(connection, (obj for obj_group in map(lift_function, bv.functions) for obj in obj_group))
 
         notify = DecompilerHandler(connection)
 
@@ -258,6 +261,13 @@ class NetworkHandler(BackgroundTaskThread):
         if kind == "delete":
             pass
 
+    def close(self):
+        for connection in self.connections:
+            if connection != self.connections[0]:
+                bv.unregister_notification(self.notifications[connection])
+
+            connection.close()
+
     def run(self):
         while not self.cancelled:
             read, _, error = select.select(self.connections, [], [], 0)
@@ -265,26 +275,33 @@ class NetworkHandler(BackgroundTaskThread):
             for connection in read:
                 if connection == self.connections[0]:
                     s, _ = connection.accept()
-                    self.init_connection(Connection(s))
+                    
+                    try:
+                        self.init_connection(Connection(s))
+                    except:
+                        traceback.print_exc()
+                        self.close()
+                        return
                 else:
                     data = connection.recv()
 
                     if data is None:
                         continue
 
-                    self.handle_message(data)
-
+                    try:
+                        self.handle_message(data)
+                    except:
+                        traceback.print_exc()
+                        self.close()
+                        return
+    
             for connection in error:
                 connection.close()
 
                 bv.unregister_notification(self.notifications[connection])
                 self.connections.remove(connection)
 
-        for connection in self.connections:
-            if connection != self.connections[0]:
-                bv.unregister_notification(self.notifications[connection])
-
-            connection.close()
+        self.close()
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("127.0.0.1", PORT_NUMBER))
