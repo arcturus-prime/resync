@@ -52,6 +52,7 @@ pub enum TypeInfo {
     Int,
     Uint,
     Float,
+    Bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -109,10 +110,18 @@ impl Client {
         std::thread::spawn(move || loop {
             buffer.clear();
 
-            if let Err(e) = reader.read_until(b'\n', &mut buffer) {
-                log::error!("Error reading from stream: {}", e);
-                continue;
+            let size = match reader.read_until(b'\n', &mut buffer) {
+                Ok(size) => size,
+                Err(e) => {
+                    log::error!("Error reading from stream: {}", e);
+                    continue;
+                }
             };
+
+            if size == 0 {
+                log::error!("Socket disconnected");
+                return
+            }
 
             let message = match serde_json::from_slice(&buffer) {
                 Ok(o) => o,
@@ -133,14 +142,15 @@ impl Client {
                     Ok(o) => o,
                     Err(e) => {
                         log::error!("Error while serializing message: {}", e);
-                        return;
+                        continue
                     }
                 };
 
                 buffer.push(b'\n');
 
-                if let Err(e) = stream.write_all(&buffer) {
-                    log::error!("Error while sending message: {}", e);
+                if let Err(_) = stream.write_all(&buffer) {
+                    log::error!("Socket disconnected");
+                    return
                 }
             }
         });

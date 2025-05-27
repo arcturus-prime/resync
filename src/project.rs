@@ -11,26 +11,23 @@ use rfd::FileDialog;
 use crate::{
     ir::{Database, DatabaseError},
     net::{Client, Message, Object},
-    Widget,
 };
-
-pub struct OpenProjectMenuUpdate<'a> {
-    pub projects: &'a mut Vec<Project>,
-    pub open: &'a mut bool,
-    pub errors: &'a mut VecDeque<String>,
-}
 
 pub struct OpenProjectMenu {
     ip_text: String,
     port_text: String,
 }
 
-impl<'a> Widget<'a> for OpenProjectMenu {
-    type State = OpenProjectMenuUpdate<'a>;
-
-    fn render(&mut self, ui: &mut Ui, state: Self::State) {
+impl OpenProjectMenu {
+    pub fn render(
+        &mut self,
+        ui: &mut Ui,
+        projects: &mut Vec<Project>,
+        errors: &mut VecDeque<String>,
+        remain_open: &mut bool,
+    ) {
         if ui.button("Close").clicked() {
-            *state.open = false
+            *remain_open = false
         }
 
         ui.add_space(20.0);
@@ -57,15 +54,13 @@ impl<'a> Widget<'a> for OpenProjectMenu {
             let project = match Project::create(ProjectKind::Local(file), filename) {
                 Ok(project) => project,
                 Err(e) => {
-                    state
-                        .errors
-                        .push_back(format!("Could not open project: {}", e));
+                    errors.push_back(format!("Could not open project: {}", e));
                     return;
                 }
             };
 
-            state.projects.push(project);
-            *state.open = false;
+            projects.push(project);
+            *remain_open = false;
         }
 
         ui.add_space(15.0);
@@ -85,7 +80,7 @@ impl<'a> Widget<'a> for OpenProjectMenu {
             let client = match Client::connect(SocketAddrV4::new(ip, port)) {
                 Ok(client) => client,
                 Err(e) => {
-                    state.errors.push_back(format!("Could not connect: {}", e));
+                    errors.push_back(format!("Could not connect: {}", e));
                     return;
                 }
             };
@@ -93,15 +88,13 @@ impl<'a> Widget<'a> for OpenProjectMenu {
             let project = match Project::create(ProjectKind::Remote(client), self.ip_text.clone()) {
                 Ok(project) => project,
                 Err(e) => {
-                    state
-                        .errors
-                        .push_back(format!("Could not create project: {}", e));
+                    errors.push_back(format!("Could not create project: {}", e));
                     return;
                 }
             };
 
-            state.projects.push(project);
-            *state.open = false
+            projects.push(project);
+            *remain_open = false
         }
     }
 }
@@ -178,25 +171,38 @@ impl Project {
 
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
-    pub fn add_objects(&mut self, data: Vec<Object>) {
-        for object in &data {
+    pub fn add_objects(&mut self, data: &Vec<Object>) {
+        for object in data {
             self.data.push(object.clone())
         }
 
         if let ProjectKind::Remote(client) = &mut self.kind {
-            let _ = client.tx.send(Message::Push { objects: data });
+            let result = client.tx.send(Message::Push {
+                objects: data.clone(),
+            });
+
+            if let Err(e) = result {
+                log::error!("Cannot send pasted objects to network thread: {}", e);
+            }
         }
     }
 }
 
-pub struct ProjectUpdate<'a> {
-    pub errors: &'a mut VecDeque<String>,
-}
+impl Project {
+    pub fn render(
+        &mut self,
+        ui: &mut Ui,
+        errors: &mut VecDeque<String>,
+        clipboard: &mut Vec<Object>,
+    ) {
+        if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
+            self.add_objects(clipboard)
+        }
 
-impl<'a> Widget<'a> for Project {
-    type State = ProjectUpdate<'a>;
+        if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy))) {
+            *clipboard = self.get_selected()
+        }
 
-    fn render(&mut self, ui: &mut Ui, state: Self::State) {
         if ui.input(|i| i.key_released(egui::Key::Escape)) {
             self.selected.clear()
         }
@@ -241,16 +247,12 @@ impl<'a> Widget<'a> for Project {
             match message {
                 Message::Delete { name } => {
                     if let Err(e) = self.data.delete(&name) {
-                        state
-                            .errors
-                            .push_back(format!("Delete message failed: {}", e));
+                        errors.push_back(format!("Delete message failed: {}", e));
                     }
                 }
                 Message::Rename { old, new } => {
                     if let Err(e) = self.data.rename(&old, new) {
-                        state
-                            .errors
-                            .push_back(format!("Rename message failed: {}", e));
+                        errors.push_back(format!("Rename message failed: {}", e));
                     }
                 }
                 Message::Push { objects } => {

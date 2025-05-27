@@ -11,6 +11,8 @@ from binaryninja import (
     types,
     BackgroundTaskThread,
     BinaryDataNotification,
+    FunctionBuilder,
+    StructureBuilder
 )
 
 #       CONFIG
@@ -34,7 +36,7 @@ def lift_function(func):
     arguments = []
     for parameter in func.type.parameters:
         arguments.append(
-            {"name": parameter.name, "arg_type": parameter.type.altname}
+            {"name": parameter.name, "arg_type": parameter.type.get_string()}
         )
 
         binal_objects.extend(lift_type(parameter.type))
@@ -43,7 +45,7 @@ def lift_function(func):
         "kind": "function",
         "name": func.name,
         "location": func.start,
-        "return_type": func.return_type.altname,
+        "return_type": func.return_type.get_string(),
         "arguments": arguments,
     }
 
@@ -53,112 +55,205 @@ def lift_function(func):
 
 
 def lift_type(type_: Type):
-    binal_types = [{"kind": "type", "name": type_.altname or type_.get_string(), "size": type_.width, "alignment": type_.alignment}]
+    binal_types = []
 
-    if type_.type_class == TypeClass.PointerTypeClass:
-        binal_types[0]["info"] = { "kind": "pointer" }
+    # array where we can push dependent types that we encounter
+    to_parse = [type_]
+    parsed_types = set({})
 
-        ptr_base_type, binal_types[0]["info"]["depth"] = get_pointer_info(type_)
+    while to_parse:
+        type_ = to_parse.pop()
 
-        binal_types[0]["info"]["to_type"] = ptr_base_type.altname
-        binal_types.extend(lift_type(ptr_base_type))
+        # need to do this to prevent circular type traversal
+        if type_ in parsed_types:
+            continue
 
-    elif type_.type_class == TypeClass.IntegerTypeClass:
-        binal_types[0]["info"] = { "kind": "int" if type_.signed else "uint" } 
-    elif type_.type_class == TypeClass.BoolTypeClass:
-        binal_types[0]["info"] = { "kind": "bool" }
-    elif type_.type_class == TypeClass.FloatTypeClass:
-        binal_types[0]["info"] = { "kind": "float" }
-    elif type_.type_class == TypeClass.EnumerationTypeClass:
-        binal_types[0]["info"] = { "kind": "enum", "values": [] }
+        parsed_types.add(type_)
+
+        binal_type = {"kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment}
         
-        for member in type_.members:
-            binal_types[0]["info"]["values"].append({
-                "name": member.name,
-                "value": member.value
-            })
+        if type_.type_class == TypeClass.PointerTypeClass:
+            binal_type["info"] = { "kind": "pointer" }
 
-    elif type_.type_class == TypeClass.StructureTypeClass:
-        binal_types[0]["info"] = { "kind": "struct", "fields": [] }
-   
-        for field in type_.members:
-            binal_types.extend(lift_type(field.type))
-            binal_types[0]["info"]["fields"].append({
-                "name": field.name,
-                "offset": field.offset,
-                "field_type": field.type.altname
-            })
+            ptr_base_type, binal_type["info"]["depth"] = get_pointer_info(type_)
+            binal_type["info"]["to_type"] = ptr_base_type.get_string()
 
-    elif type_.type_class == TypeClass.VoidTypeClass:
-        binal_types[0]["info"] = { "kind": "void" }
-    elif type_.type_class == TypeClass.ArrayTypeClass:
-        binal_types.extend(lift_type(type_.element_type))
-        binal_types[0]["info"] = { "kind": "array", "item_type": type_.element_type.altname, "size": type_.count }
-    else:
-        binal_types[0]["info"] = { "kind": "void" }
+            to_parse.append(ptr_base_type)
+        elif type_.type_class == TypeClass.IntegerTypeClass:
+            binal_type["info"] = { "kind": "int" if type_.signed else "uint" } 
+        elif type_.type_class == TypeClass.BoolTypeClass:
+            binal_type["info"] = { "kind": "bool" }
+        elif type_.type_class == TypeClass.FloatTypeClass:
+            binal_type["info"] = { "kind": "float" }
+        elif type_.type_class == TypeClass.EnumerationTypeClass:
+            binal_type["info"] = { "kind": "enum", "values": [] }
+            
+            for member in type_.members:
+                binal_type["info"]["values"].append({
+                    "name": member.name,
+                    "value": member.value
+                })
+
+        elif type_.type_class == TypeClass.StructureTypeClass:
+            binal_type["info"] = { "kind": "struct", "fields": [] }
+       
+            for field in type_.members:
+                to_parse.append(field.type)
+                binal_type["info"]["fields"].append({
+                    "name": field.name,
+                    "offset": field.offset,
+                    "field_type": field.type.get_string()
+                })
+
+        elif type_.type_class == TypeClass.VoidTypeClass:
+            binal_type["info"] = { "kind": "uint" }
+        elif type_.type_class == TypeClass.FunctionTypeClass:
+            binal_type["info"] = { "kind": "function", "return_type": type_.return_value.get_string(), "arg_types": []}
+
+            for argument in type_.parameters:
+                binal_type["info"]["arg_types"].append(argument.type.get_string())
+
+        elif type_.type_class == TypeClass.ArrayTypeClass:
+            to_parse.append(type_.element_type)
+            binal_type["info"] = { "kind": "array", "item_type": type_.element_type.get_string(), "size": type_.count }
+        elif type_.type_class == TypeClass.NamedTypeReferenceClass and type_.target(bv):
+            to_parse.append(type_.target(bv))
+
+            # don't want named types in the list to be sent
+            continue
+        else:
+            # any other types shouldn't be sent either
+            continue
+
+        binal_types.append(binal_type)
 
     return binal_types
 
 def lift_global(global_):
     pass
 
-def lower_and_add_types(types: List[dict]):
-    # register types (and stubs for compound types)
-    for type_ in types:
+def lower_and_add_types(objects: list[dict]):
+    lowered_types = {}
+
+    stacks: list[list] = [[obj for obj in objects if obj["kind"] == "type"], []]
+    while stacks[0] or stacks[1]:
+        if not stacks[0]:
+            stacks[0], stacks[1] = stacks[1], stacks[0]
+
+        type_ = stacks[0].pop()
+
         kind = type_["info"]["kind"]
-        
-        if kind == "uint":
-            binja_type = Type.int(type_["size"], False)
+        name = type_["name"]
+        size = type_["size"]
+
+        if kind == "uint" and size == 0:
+            lowered_types[name] = Type.void()
+        elif kind == "uint":
+            lowered_types[name] = Type.int(size, False)
         elif kind == "int":
-            binja_type = Type.int(type_["size"])
+            lowered_types[name] = Type.int(size)
         elif kind == "float":
-            binja_type = Type.float(type_["size"])
+            lowered_types[name] = Type.float(size)
+        elif kind == "bool":
+            lowered_types[name] = Type.bool() 
         elif kind == "pointer":
-            binja_type = Type.pointer(type=Type.void(), width=type_["size"])
+            target_type = lowered_types.get(type_["info"]["to_type"])
+            
+            if not target_type:
+                stacks[1].append(type_)
+                continue
 
+            binja_type = Type.pointer(bv.arch, type=target_type, width=size)
+        
             for _ in range(type_["info"]["depth"]):
-                binja_type = Type.pointer(type=pointer_type, width=type_["size"])
+                binja_type = Type.pointer(bv.arch, type=binja_type, width=size)
 
+            lowered_types[name] = binja_type
+        elif kind == "function":
+            binja_type = FunctionBuilder.create()
+           
+            # python moment
+            failed = False
+            for parameter in type_["info"]["arg_types"]:
+                param_type = lowered_types.get(parameter)
+                
+                if not param_type:
+                    stacks[1].append(type_)
+                    failed = True
+                    break
+
+                binja_type.append(param_type)
+
+            if failed:
+                continue
+
+            return_type = lowered_types.get(type_["info"]["return_type"])
+            
+            if not return_type:
+                stacks[1].append(type_)
+                continue
+
+            binja_type.return_value = return_type
+            lowered_types[name] = binja_type
         elif kind == "struct":
-            binja_type = Type.structure()
+            binja_type = StructureBuilder.create()
+
+            failed = False
+            for field in type_["info"]["fields"]:
+                field_type = lowered_types.get(field["field_type"])
+
+                if not field_type:
+                    stacks[1].append(type_)
+                   
+                    # this eliminates circular dependency between two or more structures
+                    bv.define_user_type(name, Type.structure())
+                    lowered_types[name] = Type.named_type_from_registered_type(bv, name)
+                    
+                    failed = True
+                    break
+
+                binja_type.add_member_at_offset(field["name"], field_type, field["offset"])
+
+            if failed:
+                continue
+
+            bv.define_user_type(name, binja_type)
+            lowered_types[name] = Type.named_type_from_registered_type(bv, name)
         elif kind == "enum":
             enum_values = [ [ value["name"], value["value"] ] for value in type_["info"]["values"] ]
-
-            binja_type = Type.enumeration(members=enum_values, width=type_["size"])
+            
+            bv.define_user_type(name, Type.enumeration(members=enum_values, width=size))
+            lowered_types[name] = Type.named_type_from_registered_type(bv, name)
         elif kind == "array":
-            binja_type = Type.array(Type.int(4), binal_type["info"]["count"]) 
+            lowered_types[name] = Type.array(Type.int(4), type_["info"]["count"])
 
-        bv.define_user_type(type_["name"], binja_type)
+def lower_and_add_functions(objects):
+    for obj in objects:
+        if obj["kind"] != "function":
+            continue
 
-    # update compound types
-    for type_ in types:
-        binja_type = bv.types[type_["name"]].mutable_copy()
-        kind = type_["info"]["kind"]
+        func = bv.create_user_function(function["location"])
+        func.name = obj["name"]
         
-        if kind == "struct":
-            for field in type_["info"]["fields"]:
-                type_name = field["field_type"]
-                binja_type.add_member_at_offset(field["name"], bv.types[type_name], field["offset"])
+        function_type = Type.function()
 
-        elif kind == "array":
-            type_name = type_["info"]["item_type"]
-            binja_type.element_type = lower_primitive_type(type_name) or bv.types[type_name]
+        for param in obj["arguments"]:
+            var_type = bv.types[param["arg_type"]]
+            function_type.append(var_type)
 
-        elif kind == "pointer":
-            type_name = type_["info"]["to_type"]
-            binja_type.target = bv.types[type_name]
+        function_type.return_value = bv.types[function["return_type"]]
+        func.type = function_type
 
-        bv.define_user_type(type_["name"], binja_type)
+        for i, param in enumerate(obj["arguments"]):
+            func.set_parameter_name(i, param["name"])
 
-def lower_and_add_function(function):
-    func = bv.create_user_function(function["address"])
-    func.name = function.name
-   
-    # creation of return type
-    func.return_type
-
-def lower_and_add_globals(global_):
+def lower_and_add_globals(objects):
     pass
+
+def lower_and_add_objects(objects: List[dict]):
+    lower_and_add_types(objects)
+    lower_and_add_functions(objects)
+    lower_and_add_globals(objects)
 
 class Connection:
     def __init__(self, socket: socket.socket):
@@ -167,17 +262,13 @@ class Connection:
 
     def send(self, data):
         binary_data = json.dumps(data) + "\n"
-
-        try:
-            self.socket.sendall(binary_data.encode("utf-8"))
-        except ConnectionResetError:
-            return None
+        self.socket.sendall(binary_data.encode("utf-8"))
 
     def recv(self):
-        try:
-            data = self.socket.recv(1024)
-        except ConnectionResetError:
-            return None
+        data = self.socket.recv(1024)
+
+        if not data:
+            raise ConnectionResetError
 
         self.buffer += data
 
@@ -208,12 +299,13 @@ class DecompilerHandler(BinaryDataNotification):
         pass
 
     def function_removed(self, view: BinaryView, func: function.Function) -> None:
-        pass
+        connection.send({ "kind": "delete", "name": func.name })
 
     def type_defined(
         self, view: BinaryView, name: types.QualifiedName, type: types.Type
     ) -> None:
-        pass
+        binal_types = lift_type(type)
+        self.connection.send({ "kind": "push", "objects": binal_types})
 
     def symbol_updated(self, view, sym):
         pass
@@ -240,7 +332,7 @@ class NetworkHandler(BackgroundTaskThread):
         connection.send({"kind": "push", "objects": objects})
 
     def init_connection(self, connection: Connection):
-        self.sync_objects(connection, (type_ for type_group in map(lift_type, bv.types.values()) for type_ in type_group))
+        self.sync_objects(connection, (obj for obj_group in map(lift_type, bv.types.values()) for obj in obj_group))
         self.sync_objects(connection, (obj for obj_group in map(lift_function, bv.functions) for obj in obj_group))
 
         notify = DecompilerHandler(connection)
@@ -252,21 +344,21 @@ class NetworkHandler(BackgroundTaskThread):
 
     def handle_message(self, message):
         kind = message["kind"]
-
+        
         #TODO: Handle each message
         if kind == "push":
-            pass 
+            lower_and_add_objects(message["objects"])
         if kind == "rename":
             pass
         if kind == "delete":
             pass
 
-    def close(self):
-        for connection in self.connections:
-            if connection != self.connections[0]:
-                bv.unregister_notification(self.notifications[connection])
+    def close(self, connection: Connection):
+        if connection != self.connections[0]:
+            bv.unregister_notification(self.notifications[connection])
 
-            connection.close()
+        connection.close()
+        self.connections.remove(connection)
 
     def run(self):
         while not self.cancelled:
@@ -280,28 +372,29 @@ class NetworkHandler(BackgroundTaskThread):
                         self.init_connection(Connection(s))
                     except:
                         traceback.print_exc()
-                        self.close()
-                        return
+                        self.close(connection)
                 else:
-                    data = connection.recv()
+                    try:
+                        data = connection.recv()
+                    except ConnectionResetError:
+                        self.connections.remove(connection)
+                        continue
 
-                    if data is None:
+                    if not data:
                         continue
 
                     try:
                         self.handle_message(data)
                     except:
                         traceback.print_exc()
-                        self.close()
-                        return
-    
+                        self.close(connection)
+
             for connection in error:
-                connection.close()
+                self.close(connection)
 
-                bv.unregister_notification(self.notifications[connection])
-                self.connections.remove(connection)
-
-        self.close()
+        for connection in self.connections:
+            connection.close()
+            bv.unregister_notification(self.notifications[connection])
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("127.0.0.1", PORT_NUMBER))

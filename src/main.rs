@@ -1,24 +1,20 @@
+mod ir;
 mod net;
 mod project;
-mod ir;
 
 use std::collections::VecDeque;
 
-use eframe::egui::{self, CentralPanel, Context, TopBottomPanel, Ui, ViewportBuilder, Window};
+use eframe::egui::{self, CentralPanel, Context, TopBottomPanel, ViewportBuilder, Window};
 
-use project::{OpenProjectMenu, OpenProjectMenuUpdate, Project, ProjectUpdate};
-
-pub trait Widget<'a> {
-    type State;
-
-    fn render(&'a mut self, ui: &mut Ui, state: Self::State);
-}
+use project::{OpenProjectMenu, Project};
+use net::Object;
 
 struct App {
     projects: Vec<Project>,
     current: usize,
 
     errors: VecDeque<String>,
+    clipboard: Vec<Object>,
 
     should_open: bool,
     open_project: OpenProjectMenu,
@@ -31,6 +27,7 @@ impl Default for App {
             current: 0,
 
             errors: VecDeque::new(),
+            clipboard: Vec::new(),
 
             should_open: false,
             open_project: OpenProjectMenu::default(),
@@ -42,24 +39,29 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
         TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.horizontal(|ui| {
+                let spacing = ui.spacing().item_spacing.x;
+
                 let mut remove: Option<usize> = None;
 
-                for i in 0..self.projects.len() {
-                    egui::Frame::default().inner_margin(1.0).fill(egui::Color32::from_gray(230)).show(ui, |ui| {
-                        if ui.button(&self.projects[i].name).clicked() {
-                            self.current = i;
-                        }
+                for i in 0..self.projects.len() {   
+                    ui.spacing_mut().item_spacing.x = 0.0;
 
-                        if ui.button("X").clicked() {
-                            remove = Some(i);
-                        }
-                    });
+                    if ui.button(&self.projects[i].name).clicked() {
+                        self.current = i;
+                    }
+
+                    ui.spacing_mut().item_spacing.x = spacing;
+
+                    if ui.button("X").clicked() {
+                        remove = Some(i);
+                    }
                 }
 
                 if let Some(i) = remove {
                     self.projects.remove(i);
                     self.current = if i == 0 { 0 } else { i - 1 };
                 }
+
 
                 if ui.button("+").clicked() {
                     self.should_open = true;
@@ -75,11 +77,9 @@ impl eframe::App for App {
                 .show(ctx, |ui| {
                     self.open_project.render(
                         ui,
-                        OpenProjectMenuUpdate {
-                            projects: &mut self.projects,
-                            open: &mut self.should_open,
-                            errors: &mut self.errors,
-                        },
+                        &mut self.projects,
+                        &mut self.errors,
+                        &mut self.should_open,
                     );
                 });
         }
@@ -106,9 +106,8 @@ impl eframe::App for App {
         CentralPanel::default().show(ctx, |ui| {
             self.projects[self.current].render(
                 ui,
-                ProjectUpdate {
-                    errors: &mut self.errors,
-                },
+                &mut self.errors,
+                &mut self.clipboard
             )
         });
 

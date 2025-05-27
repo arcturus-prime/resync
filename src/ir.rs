@@ -37,6 +37,14 @@ impl<'a> Display for DatabaseError {
     }
 }
 
+pub struct Function {
+
+}
+
+pub struct Type {
+
+}
+
 pub struct Database {
     objects: Vec<Object>,
     lookup: HashMap<String, usize>,
