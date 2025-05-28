@@ -2,7 +2,7 @@ mod ir;
 mod net;
 mod project;
 
-use std::collections::VecDeque;
+use std::collections::{VecDeque, HashMap};
 
 use eframe::egui::{self, CentralPanel, Context, TopBottomPanel, ViewportBuilder, Window};
 
@@ -14,7 +14,7 @@ struct App {
     current: usize,
 
     errors: VecDeque<String>,
-    clipboard: Vec<Object>,
+    clipboard: HashMap<String, Object>,
 
     should_open: bool,
     open_project: OpenProjectMenu,
@@ -27,7 +27,7 @@ impl Default for App {
             current: 0,
 
             errors: VecDeque::new(),
-            clipboard: Vec::new(),
+            clipboard: HashMap::new(),
 
             should_open: false,
             open_project: OpenProjectMenu::default(),

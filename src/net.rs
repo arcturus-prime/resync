@@ -4,6 +4,7 @@ use std::{
     io::{BufRead, BufReader, Write},
     net::{SocketAddrV4, TcpStream},
     sync::mpsc::{self, Receiver},
+    collections::HashMap,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -58,7 +59,7 @@ pub enum TypeInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
-pub enum ObjectInfo {
+pub enum Object {
     Type {
         size: usize,
         alignment: usize,
@@ -75,21 +76,12 @@ pub enum ObjectInfo {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Object {
-    pub name: String,
-
-    #[serde(flatten)]
-    pub info: ObjectInfo,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
     Delete { name: String },
-    Rename { old: String, new: String },
-    Push { objects: Vec<Object> },
+    Push { objects: HashMap<String, Object> },
 }
 
 pub struct Client {

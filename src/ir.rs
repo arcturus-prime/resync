@@ -37,8 +37,18 @@ impl<'a> Display for DatabaseError {
     }
 }
 
-pub struct Function {
 
+#[repr(u8)]
+enum Instruction {
+    Const24,
+    Const16,
+    Const8,
+}
+
+struct Function {
+    name: String,
+    code: Vec<Instruction>,
+    
 }
 
 pub struct Type {
@@ -46,15 +56,13 @@ pub struct Type {
 }
 
 pub struct Database {
-    objects: Vec<Object>,
-    lookup: HashMap<String, usize>,
+    objects: HashMap<String, Object>,
 }
 
 impl Database {
     pub fn new() -> Self {
         Self {
-            objects: Vec::new(),
-            lookup: HashMap::new(),
+            objects: HashMap::new(),
         }
     }
 
@@ -63,14 +71,9 @@ impl Database {
         let mut project_data = Vec::<u8>::new();
 
         project_file.read_to_end(&mut project_data)?;
-        let object_list: Vec<Object> = serde_json::from_slice(project_data.as_slice())?;
+        let objects: HashMap<String, Object> = serde_json::from_slice(project_data.as_slice())?;
 
-        let mut lookup = HashMap::new();
-        for (id, object) in object_list.iter().enumerate() {
-            lookup.insert(object.name.to_string(), id);
-        }
-
-        Ok(Database { objects: object_list, lookup })
+        Ok(Database { objects })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), DatabaseError> {
@@ -93,56 +96,23 @@ impl Database {
     }
 
     pub fn name_iter(&self) -> impl Iterator<Item = &String> + '_ {
-        self.objects.iter().map(|obj| &obj.name)
+        self.objects.keys()
     }
 
-    pub fn get(&self, name: &str) -> Result<Object, DatabaseError> {
-        let index = match self.lookup.get(name) {
-            Some(index) => *index,
-            None => return Err(DatabaseError::ObjectDoesNotExist)
-        };
+    pub fn get(&self, name: &str) -> Result<HashMap<String, Object>, DatabaseError> {
+        let mut map = HashMap::new();
 
-        Ok(self.objects[index].clone())
+        map.insert(name.to_string(), self.objects[name].clone());
+
+        Ok(map)
     }
 
-    pub fn push(&mut self, object: Object) {
-        if let Some(id) = self.lookup.get(&object.name) {
-            self.objects[*id] = object;
-        } else {
-            self.lookup.insert(object.name.clone(), self.objects.len());
-
-            self.objects.push(object);
-        }
-    }
-
-    pub fn rename(&mut self, old: &str, new: String) -> Result<(), DatabaseError> {
-        let index = match self.lookup.get(old) {
-            Some(index) => *index,
-            None => return Err(DatabaseError::ObjectDoesNotExist)
-        };
-
-        self.objects[index].name = new.clone();
-        self.lookup.remove(old);
-        self.lookup.insert(new, index);
-
-        Ok(())
+    pub fn push(&mut self, objects: HashMap<String, Object>) {
+        self.objects.extend(objects)
     }
 
     pub fn delete(&mut self, name: &str) -> Result<(), DatabaseError> {
-        let index = match self.lookup.get(name) {
-            Some(index) => *index,
-            None => return Err(DatabaseError::ObjectDoesNotExist)
-        };
-
-        let last = self.objects.len() - 1;
-        if index != last {
-            self.objects.swap(index, last);
-            self.objects.pop();
-        }
-
-        self.lookup
-            .insert(self.objects[index].name.clone(), index);
-        self.lookup.remove(name);
+        self.objects.remove(name);
 
         Ok(())
     }

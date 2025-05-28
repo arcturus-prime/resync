@@ -7,8 +7,8 @@ from binaryninja import (
     TypeClass,
     Type,
     BinaryView,
-    function,
-    types,
+    Function,
+    QualifiedName,
     BackgroundTaskThread,
     BinaryDataNotification,
     FunctionBuilder,
@@ -21,6 +21,29 @@ PORT_NUMBER = 12007
 INIT_SYNC_BATCH = 50
 # --------------------
 
+
+def lift_function(func):
+    binal_objects = {}
+
+    arguments = []
+    for parameter in func.type.parameters:
+        arguments.append(
+            {"name": parameter.name, "arg_type": parameter.type.get_string()}
+        )
+
+        binal_objects.update(lift_type(parameter.type))
+    
+    binal_func = {
+        "kind": "function",
+        "location": func.start,
+        "return_type": func.return_type.get_string(),
+        "arguments": arguments,
+    }
+
+    binal_objects[func.name] = binal_func
+
+    return binal_objects
+
 def get_pointer_info(type_):
     depth = 0
     while type_.type_class == TypeClass.PointerTypeClass:
@@ -29,33 +52,8 @@ def get_pointer_info(type_):
 
     return type_, depth
 
-
-def lift_function(func):
-    binal_objects = []
-
-    arguments = []
-    for parameter in func.type.parameters:
-        arguments.append(
-            {"name": parameter.name, "arg_type": parameter.type.get_string()}
-        )
-
-        binal_objects.extend(lift_type(parameter.type))
-    
-    binal_func = {
-        "kind": "function",
-        "name": func.name,
-        "location": func.start,
-        "return_type": func.return_type.get_string(),
-        "arguments": arguments,
-    }
-
-    binal_objects.append(binal_func)
-
-    return binal_objects
-
-
 def lift_type(type_: Type):
-    binal_types = []
+    binal_types = {}
 
     # array where we can push dependent types that we encounter
     to_parse = [type_]
@@ -70,7 +68,7 @@ def lift_type(type_: Type):
 
         parsed_types.add(type_)
 
-        binal_type = {"kind": "type", "name": type_.get_string(), "size": type_.width, "alignment": type_.alignment}
+        binal_type = {"kind": "type", "size": type_.width, "alignment": type_.alignment}
         
         if type_.type_class == TypeClass.PointerTypeClass:
             binal_type["info"] = { "kind": "pointer" }
@@ -125,26 +123,34 @@ def lift_type(type_: Type):
             # any other types shouldn't be sent either
             continue
 
-        binal_types.append(binal_type)
+        binal_types[type_.get_string()] = binal_type
 
     return binal_types
 
 def lift_global(global_):
-    pass
+    binal_objects = lift_type(global_.type)
 
-def lower_and_add_types(objects: list[dict]):
+    binal_global = { "kind": "global", "location": global_.address, "global_type": global_.type.get_string() }
+    binal_objects[global_.name] = binal_global
+
+    return binal_objects
+
+def lower_and_add_types(objects: dict):
     lowered_types = {}
 
-    stacks: list[list] = [[obj for obj in objects if obj["kind"] == "type"], []]
+    stacks: list[list] = [[(name, obj) for name, obj in objects if obj["kind"] == "type"], []]
     while stacks[0] or stacks[1]:
         if not stacks[0]:
             stacks[0], stacks[1] = stacks[1], stacks[0]
 
-        type_ = stacks[0].pop()
+        pair = stacks[0].pop()
+        type_ = pair[1]        
+        name = pair[0]
 
         kind = type_["info"]["kind"]
-        name = type_["name"]
         size = type_["size"]
+
+        print(name)
 
         if kind == "uint" and size == 0:
             lowered_types[name] = Type.void()
@@ -178,7 +184,7 @@ def lower_and_add_types(objects: list[dict]):
                 param_type = lowered_types.get(parameter)
                 
                 if not param_type:
-                    stacks[1].append(type_)
+                    stacks[1].append((name, type_))
                     failed = True
                     break
 
@@ -190,7 +196,7 @@ def lower_and_add_types(objects: list[dict]):
             return_type = lowered_types.get(type_["info"]["return_type"])
             
             if not return_type:
-                stacks[1].append(type_)
+                stacks[1].append((name, type_))
                 continue
 
             binja_type.return_value = return_type
@@ -203,7 +209,7 @@ def lower_and_add_types(objects: list[dict]):
                 field_type = lowered_types.get(field["field_type"])
 
                 if not field_type:
-                    stacks[1].append(type_)
+                    stacks[1].append((name, type_))
                    
                     # this eliminates circular dependency between two or more structures
                     bv.define_user_type(name, Type.structure())
@@ -227,13 +233,13 @@ def lower_and_add_types(objects: list[dict]):
         elif kind == "array":
             lowered_types[name] = Type.array(Type.int(4), type_["info"]["count"])
 
-def lower_and_add_functions(objects):
-    for obj in objects:
+def lower_and_add_functions(objects: dict):
+    for name, obj in objects:
         if obj["kind"] != "function":
             continue
 
-        func = bv.create_user_function(function["location"])
-        func.name = obj["name"]
+        func = bv.create_user_function(obj["location"])
+        func.name = name
         
         function_type = Type.function()
 
@@ -241,19 +247,35 @@ def lower_and_add_functions(objects):
             var_type = bv.types[param["arg_type"]]
             function_type.append(var_type)
 
-        function_type.return_value = bv.types[function["return_type"]]
+        function_type.return_value = bv.types[obj["return_type"]]
         func.type = function_type
 
         for i, param in enumerate(obj["arguments"]):
             func.set_parameter_name(i, param["name"])
 
 def lower_and_add_globals(objects):
-    pass
+    for name, obj in objects:
+        if obj["kind"] != "global":
+            continue
 
-def lower_and_add_objects(objects: List[dict]):
+        bv.create_data_var(obj["location"], bv.types[obj["global_type"]], name)
+
+def lower_and_add_objects(objects: dict):
     lower_and_add_types(objects)
     lower_and_add_functions(objects)
     lower_and_add_globals(objects)
+
+def remove_object(name: str):
+    funcs = bv.get_function_by_name(name)
+    
+    if funcs:
+        bv.remove_user_function(funcs[0])
+    
+    bv.undefine_user_type(name)
+    
+    for var in bv.data_vars:
+        if var.name == name:
+            bv.remove_user_data_var(var.address)
 
 class Connection:
     def __init__(self, socket: socket.socket):
@@ -292,26 +314,35 @@ class DecompilerHandler(BinaryDataNotification):
 
         self.connection = connection
 
-    def function_added(self, view: BinaryView, func: function.Function) -> None:
-        pass
+    def function_added(self, view: BinaryView, func: Function) -> None:
+        binal_objects = lift_function(func)
+        self.connection.send({ "kind": "push", "objects": binal_objects})
 
-    def function_updated(self, view: BinaryView, func: function.Function) -> None:
-        pass
+    def function_updated(self, view: BinaryView, func: Function) -> None:
+        binal_objects = lift_function(func)
+        self.connection.send({ "kind": "push", "objects": binal_objects})
 
-    def function_removed(self, view: BinaryView, func: function.Function) -> None:
-        connection.send({ "kind": "delete", "name": func.name })
+    def function_removed(self, view: BinaryView, func: Function) -> None:
+        self.connection.send({ "kind": "delete", "name": func.name })
 
     def type_defined(
-        self, view: BinaryView, name: types.QualifiedName, type: types.Type
+        self, view: BinaryView, name: QualifiedName, type: Type
     ) -> None:
         binal_types = lift_type(type)
         self.connection.send({ "kind": "push", "objects": binal_types})
 
-    def symbol_updated(self, view, sym):
+    def type_undefined(self, view: BinaryView, name: QualifiedName, type: Type) -> None:
+        self.connection.send({ "kind": "delete", "name": type.get_string() })
+
+    def data_var_updated(self, view, var):
+        pass
+    
+    def data_var_added(self, view, var):
         pass
 
+    def data_var_removed(self, view, var):
+        pass
 
-# Handles connecting Resync clients, receiving updates from clients, and pushing updates to clients
 class NetworkHandler(BackgroundTaskThread):
     def __init__(self, socket: socket.socket):
         super().__init__("Handling requests from Binal...", True)
@@ -320,11 +351,10 @@ class NetworkHandler(BackgroundTaskThread):
         self.notifications = {}
 
     def sync_objects(self, connection: Connection, object_iter: Iterable):
-        objects = []
+        objects = {}
 
-        for index, obj in enumerate(object_iter):
-            objects.append(obj)
-
+        for index, (name, obj) in enumerate(object_iter):
+            objects[name] = obj
             if index != 0 and index % INIT_SYNC_BATCH == 0:
                 connection.send({"kind": "push", "objects": objects})
                 objects.clear()
@@ -332,9 +362,10 @@ class NetworkHandler(BackgroundTaskThread):
         connection.send({"kind": "push", "objects": objects})
 
     def init_connection(self, connection: Connection):
-        self.sync_objects(connection, (obj for obj_group in map(lift_type, bv.types.values()) for obj in obj_group))
-        self.sync_objects(connection, (obj for obj_group in map(lift_function, bv.functions) for obj in obj_group))
-
+        self.sync_objects(connection, ((name, obj) for d in map(lift_type, bv.types.values()) for name, obj in d.items()))
+        self.sync_objects(connection, ((name, obj) for d in map(lift_function, bv.functions) for name, obj in d.items()))
+        self.sync_objects(connection, ((name, obj) for d in map(lift_global, bv.data_vars.values()) for name, obj in d.items()))
+        
         notify = DecompilerHandler(connection)
 
         self.notifications[connection] = notify
@@ -348,10 +379,8 @@ class NetworkHandler(BackgroundTaskThread):
         #TODO: Handle each message
         if kind == "push":
             lower_and_add_objects(message["objects"])
-        if kind == "rename":
-            pass
         if kind == "delete":
-            pass
+            remove_object(message["name"])
 
     def close(self, connection: Connection):
         if connection != self.connections[0]:
@@ -393,8 +422,10 @@ class NetworkHandler(BackgroundTaskThread):
                 self.close(connection)
 
         for connection in self.connections:
+            if connection != self.connections[0]:
+                bv.unregister_notification(self.notifications[connection])
+            
             connection.close()
-            bv.unregister_notification(self.notifications[connection])
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.bind(("127.0.0.1", PORT_NUMBER))

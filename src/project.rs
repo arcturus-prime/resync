@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     net::{Ipv4Addr, SocketAddrV4},
     path::PathBuf,
     str::FromStr,
@@ -35,9 +35,9 @@ impl OpenProjectMenu {
         //Open project from file
         let open = ui.button("Open").clicked();
 
-        //Create new project
         ui.add_space(5.0);
 
+        //Create new project
         let new = ui.button("New").clicked();
 
         if open || new {
@@ -146,24 +146,22 @@ impl Project {
     }
 
     pub fn save(&self, errors: &mut VecDeque<String>) {
-        //TODO: Handle this error using GUI
         let result = match &self.kind {
             ProjectKind::Local(path) => self.data.save(&path),
             ProjectKind::Remote(_) => Ok(()),
         };
 
         let Err(e) = result else { return };
-
         errors.push_back(format!("Could not save project: {}", e))
     }
 
     // Get all objects that are selected at the moment in the project listing
     // (used for copying to clipboard)
-    pub fn get_selected(&self) -> Vec<Object> {
-        let mut data = Vec::new();
+    pub fn get_selected(&self) -> HashMap<String, Object> {
+        let mut data = HashMap::new();
 
         for name in &self.selected {
-            data.push(self.data.get(&name).unwrap());
+            data.extend(self.data.get(&name).unwrap());
         }
 
         data
@@ -171,19 +169,34 @@ impl Project {
 
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
-    pub fn add_objects(&mut self, data: &Vec<Object>) {
-        for object in data {
-            self.data.push(object.clone())
-        }
+    pub fn add_objects(&mut self, data: HashMap<String, Object>) {
+        self.data.push(data.clone());
 
         if let ProjectKind::Remote(client) = &mut self.kind {
-            let result = client.tx.send(Message::Push {
-                objects: data.clone(),
-            });
+            let result = client.tx.send(Message::Push { objects: data });
 
             if let Err(e) = result {
                 log::error!("Cannot send pasted objects to network thread: {}", e);
             }
+        }
+    }
+
+    // Delets an object by name from the project
+    // Will send a network message if project is of kind Remote
+    pub fn delete_object(&mut self, name: &str) {
+        if let Err(e) = self.data.delete(name) {
+            log::error!("Could not delete object: {}", e);
+            return;
+        }
+
+        let ProjectKind::Remote(client) = &self.kind else {
+            return;
+        };
+
+        if let Err(e) = client.tx.send(Message::Delete {
+            name: name.to_string(),
+        }) {
+            log::error!("Could not queue delete message for network: {}", e);
         }
     }
 }
@@ -193,14 +206,22 @@ impl Project {
         &mut self,
         ui: &mut Ui,
         errors: &mut VecDeque<String>,
-        clipboard: &mut Vec<Object>,
+        clipboard: &mut HashMap<String, Object>,
     ) {
         if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
-            self.add_objects(clipboard)
+            self.add_objects(clipboard.clone())
         }
 
         if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Copy))) {
             *clipboard = self.get_selected()
+        }
+
+        if ui.input(|i| i.key_released(egui::Key::Delete)) {
+            let contents = std::mem::take(&mut self.selected);
+
+            for name in contents {
+                self.delete_object(&name)
+            }
         }
 
         if ui.input(|i| i.key_released(egui::Key::Escape)) {
@@ -250,16 +271,7 @@ impl Project {
                         errors.push_back(format!("Delete message failed: {}", e));
                     }
                 }
-                Message::Rename { old, new } => {
-                    if let Err(e) = self.data.rename(&old, new) {
-                        errors.push_back(format!("Rename message failed: {}", e));
-                    }
-                }
-                Message::Push { objects } => {
-                    for object in objects {
-                        self.data.push(object)
-                    }
-                }
+                Message::Push { objects } => self.data.push(objects),
             }
         }
     }
