@@ -103,6 +103,10 @@ impl eframe::App for App {
             return;
         }
 
+        for project in &mut self.projects {
+            project.handle_network_updates()
+        }
+
         CentralPanel::default().show(ctx, |ui| {
             self.projects[self.current].render(
                 ui,
@@ -110,10 +114,6 @@ impl eframe::App for App {
                 &mut self.clipboard
             )
         });
-
-        if ctx.input(|i| i.modifiers.ctrl && i.key_released(egui::Key::S)) {
-            self.projects[self.current].save(&mut self.errors);
-        }
     }
 }
 

@@ -199,15 +199,18 @@ impl Project {
             log::error!("Could not queue delete message for network: {}", e);
         }
     }
-}
 
-impl Project {
+    // Render the project UI and handle input
     pub fn render(
         &mut self,
         ui: &mut Ui,
         errors: &mut VecDeque<String>,
         clipboard: &mut HashMap<String, Object>,
     ) {
+        if ui.input(|i| i.modifiers.ctrl && i.key_released(egui::Key::S)) {
+            self.save(errors);
+        }
+
         if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
             self.add_objects(clipboard.clone())
         }
@@ -256,6 +259,10 @@ impl Project {
             );
         });
 
+    }
+
+    // Handle incoming network messages
+    pub fn handle_network_updates(&mut self) {
         loop {
             let ProjectKind::Remote(client) = &mut self.kind else {
                 return;
@@ -268,7 +275,7 @@ impl Project {
             match message {
                 Message::Delete { name } => {
                     if let Err(e) = self.data.delete(&name) {
-                        errors.push_back(format!("Delete message failed: {}", e));
+                        log::error!("Delete message failed: {}", e);
                     }
                 }
                 Message::Push { objects } => self.data.push(objects),

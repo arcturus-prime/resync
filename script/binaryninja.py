@@ -335,13 +335,15 @@ class DecompilerHandler(BinaryDataNotification):
         self.connection.send({ "kind": "delete", "name": type.get_string() })
 
     def data_var_updated(self, view, var):
-        pass
+        binal_objects = lift_global(var)
+        self.connection.send({ "kind": "push", "objects": binal_objects})
     
     def data_var_added(self, view, var):
-        pass
+        binal_objects = lift_global(var)
+        self.connection.send({ "kind": "push", "objects": binal_objects})
 
     def data_var_removed(self, view, var):
-        pass
+        self.connection.send({ "kind": "delete", "name": var.name })
 
 class NetworkHandler(BackgroundTaskThread):
     def __init__(self, socket: socket.socket):
