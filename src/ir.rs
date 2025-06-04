@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Display,
     fs::{File, OpenOptions},
     io::{Read, Write},
@@ -107,6 +107,8 @@ struct Function {
     name: String,
     code: Vec<Instruction>,
 
+    location: usize,
+
     return_type: TypeRef,
     argument_names: Vec<String>,
     argument_types: Vec<TypeRef>,
@@ -118,6 +120,8 @@ impl Default for Function {
             name: String::new(),
             code: Vec::new(),
 
+            location: 0,
+
             return_type: TypeRef::Uint(0),
             argument_names: Vec::new(),
             argument_types: Vec::new(),
@@ -128,6 +132,7 @@ impl Default for Function {
 #[derive(Serialize, Deserialize)]
 struct Global {
     name: String,
+    location: usize,
     r#type: TypeRef,
 }
 
@@ -135,6 +140,7 @@ impl Default for Global {
     fn default() -> Self {
         Global {
             name: String::new(),
+            location: 0,
             r#type: TypeRef::Uint(0),
         }
     }
@@ -187,8 +193,30 @@ impl Database {
 
     pub fn types_get_net(&self, name: &str) -> HashMap<String, Object> {
         let mut map = HashMap::new();
+        let mut lifted = HashSet::new();
+        let mut to_lift = vec![self.type_lookup[name]];
 
-        todo!();
+        while !to_lift.is_empty() {
+            let index = to_lift.pop().unwrap();
+
+            if lifted.contains(&index) {
+                continue;
+            }
+            lifted.insert(index);
+
+            let r#type = &self.types[index];
+
+            let lifted_type: net::Object = match &r#type.info {
+                TypeInfo::Struct(struct_members) => todo!(),
+                TypeInfo::Enum(enum_values) => todo!(),
+                TypeInfo::Union(union_members) => todo!(),
+                TypeInfo::TypeDef(type_ref) => todo!(),
+                TypeInfo::Function(type_refs, type_ref) => todo!(),
+                TypeInfo::Array(type_ref, _) => todo!(),
+            };
+
+            map.insert(r#type.name.clone(), lifted_type);
+        }
 
         map
     }
@@ -342,6 +370,7 @@ impl Database {
                 } => {
                     let index = self.function_lookup[&name];
 
+                    self.functions[index].location = location;
                     self.functions[index].name = name;
                     self.functions[index].return_type = self.lift_type_ref(&r#type);
                     self.functions[index].argument_types = arguments
@@ -354,6 +383,7 @@ impl Database {
                 Object::Data { r#type, location } => {
                     let index = self.data_lookup[&name];
 
+                    self.data[index].location = location;
                     self.data[index].name = name;
                     self.data[index].r#type = self.lift_type_ref(&r#type);
                 }

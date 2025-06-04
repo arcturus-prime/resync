@@ -79,7 +79,7 @@ Every type has an `info` field that contains additional information.
 }
 ```
 #### TypeRef
-Sometimes objects need to refer to a type. This is done with special structure called a type references. Here is the format for type references (`TypeRef`s), as well as a few reserved keywords.
+Sometimes objects need to refer to a type. This is done with special structure called a type reference. Here is the format for type references (`TypeRef`s), as well as a few reserved keywords.
 
 There are three kinds of `TypeRef`s:
 - `pointer` delineates a pointer type. The format is always `{ "kind": "pointer", "depth": 1, "name": "type name here" }`, where `depth` indicates the number of asterisks
