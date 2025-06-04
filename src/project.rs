@@ -13,6 +13,7 @@ use crate::{
     net::{Client, Message, Object},
 };
 
+#[derive(Default)]
 pub struct OpenProjectMenu {
     ip_text: String,
     port_text: String,
@@ -74,7 +75,7 @@ impl OpenProjectMenu {
             .labelled_by(port_label.id);
 
         if ui.button("Connect").clicked() {
-            let ip = Ipv4Addr::from_str(&self.ip_text).unwrap_or(Ipv4Addr::new(127, 0, 0, 1));
+            let ip = Ipv4Addr::from_str(&self.ip_text).unwrap_or(Ipv4Addr::LOCALHOST);
             let port = u16::from_str(&self.port_text).unwrap_or(12007);
 
             let client = match Client::connect(SocketAddrV4::new(ip, port)) {
@@ -85,7 +86,13 @@ impl OpenProjectMenu {
                 }
             };
 
-            let project = match Project::create(ProjectKind::Remote(client), self.ip_text.clone()) {
+            let project_name = if self.ip_text.is_empty() {
+                String::from("127.0.0.1")
+            } else {
+                std::mem::take(&mut self.ip_text)
+            };
+
+            let project = match Project::create(ProjectKind::Remote(client), project_name) {
                 Ok(project) => project,
                 Err(e) => {
                     errors.push_back(format!("Could not create project: {}", e));
@@ -99,24 +106,22 @@ impl OpenProjectMenu {
     }
 }
 
-impl Default for OpenProjectMenu {
-    fn default() -> Self {
-        Self {
-            ip_text: String::new(),
-            port_text: String::new(),
-        }
-    }
-}
-
 pub enum ProjectKind {
     Remote(Client),
     Local(PathBuf),
+}
+
+enum Tab {
+    Types,
+    Functions,
+    Globals,
 }
 
 pub struct Project {
     pub name: String,
 
     selected: HashSet<String>,
+    current_tab: Tab,
 
     kind: ProjectKind,
     data: Database,
@@ -125,12 +130,12 @@ pub struct Project {
 impl Project {
     pub fn create(kind: ProjectKind, name: String) -> Result<Self, DatabaseError> {
         let data = match &kind {
-            ProjectKind::Remote(_) => Database::new(),
+            ProjectKind::Remote(_) => Database::default(),
             ProjectKind::Local(path) => {
                 let data = if path.exists() {
                     Database::open(&path)?
                 } else {
-                    Database::new()
+                    Database::default()
                 };
 
                 data
@@ -140,6 +145,7 @@ impl Project {
         Ok(Self {
             name,
             kind,
+            current_tab: Tab::Types,
             selected: HashSet::new(),
             data,
         })
@@ -161,7 +167,13 @@ impl Project {
         let mut data = HashMap::new();
 
         for name in &self.selected {
-            data.extend(self.data.get(&name).unwrap());
+            let objects = match self.current_tab {
+                Tab::Types => self.data.types_get_net(name),
+                Tab::Functions => self.data.functions_get_net(name),
+                Tab::Globals => self.data.globals_get_net(name),
+            };
+
+            data.extend(objects);
         }
 
         data
@@ -170,7 +182,7 @@ impl Project {
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: HashMap<String, Object>) {
-        self.data.push(data.clone());
+        self.data.push_net(data.clone());
 
         if let ProjectKind::Remote(client) = &mut self.kind {
             let result = client.tx.send(Message::Push { objects: data });
@@ -182,22 +194,16 @@ impl Project {
     }
 
     // Delets an object by name from the project
-    // Will send a network message if project is of kind Remote
     pub fn delete_object(&mut self, name: &str) {
-        if let Err(e) = self.data.delete(name) {
-            log::error!("Could not delete object: {}", e);
-            return;
+        if let ProjectKind::Remote(_) = &self.kind {
+            return
         }
 
-        let ProjectKind::Remote(client) = &self.kind else {
-            return;
+        match self.current_tab {
+            Tab::Types => self.data.types_delete(name),
+            Tab::Functions => self.data.functions_delete(name),
+            Tab::Globals => self.data.globals_delete(name),
         };
-
-        if let Err(e) = client.tx.send(Message::Delete {
-            name: name.to_string(),
-        }) {
-            log::error!("Could not queue delete message for network: {}", e);
-        }
     }
 
     // Render the project UI and handle input
@@ -231,34 +237,51 @@ impl Project {
             self.selected.clear()
         }
 
-        ui.columns(2, |ui| {
-            let text_style = ui[0].text_style_height(&egui::TextStyle::Body);
+        ui.horizontal(|ui| {
+            if ui.button("Types").clicked() {
+                self.current_tab = Tab::Types
+            }
 
+            if ui.button("Functions").clicked() {
+                self.current_tab = Tab::Functions
+            }
+
+            if ui.button("Globals").clicked() {
+                self.current_tab = Tab::Globals
+            }
+        });
+
+        match self.current_tab {
+            Tab::Types => Self::render_main_view(&mut self.selected, ui, self.data.types_len(), self.data.types_name()),
+            Tab::Functions => Self::render_main_view(&mut self.selected, ui, self.data.functions_len(), self.data.functions_name()),
+            Tab::Globals => Self::render_main_view(&mut self.selected, ui, self.data.globals_len(), self.data.globals_name()),
+        };
+    }
+
+    fn render_main_view<'a, I: Iterator<Item = &'a String>>(selected: &mut HashSet<String>, ui: &mut Ui, len: usize, iter: I) {
+        let text_style = ui.text_style_height(&egui::TextStyle::Body);
+
+        ui.columns(2, |ui| {
             egui::ScrollArea::vertical().show_rows(
                 &mut ui[0],
                 text_style,
-                self.data.len(),
+                len,
                 |ui, row_range| {
-                    let names = self
-                        .data
-                        .name_iter()
-                        .skip(row_range.start)
-                        .take(row_range.count());
+                    let names = iter.skip(row_range.start).take(row_range.count());
 
                     for name in names {
-                        let selected = self.selected.contains(name);
-                        let label = ui.selectable_label(selected, name);
+                        let is_selected = selected.contains(name);
+                        let label = ui.selectable_label(is_selected, name);
 
-                        if label.clicked() && selected {
-                            self.selected.remove(name);
-                        } else if label.clicked() && !selected {
-                            self.selected.insert(name.clone());
+                        if label.clicked() && is_selected {
+                            selected.remove(name);
+                        } else if label.clicked() && !is_selected {
+                            selected.insert(name.clone());
                         }
                     }
                 },
             );
-        });
-
+        })
     }
 
     // Handle incoming network messages
@@ -273,12 +296,7 @@ impl Project {
             };
 
             match message {
-                Message::Delete { name } => {
-                    if let Err(e) = self.data.delete(&name) {
-                        log::error!("Delete message failed: {}", e);
-                    }
-                }
-                Message::Push { objects } => self.data.push(objects),
+                Message::Push { objects } => self.data.push_net(objects),
             }
         }
     }

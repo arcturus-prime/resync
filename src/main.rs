@@ -2,12 +2,12 @@ mod ir;
 mod net;
 mod project;
 
-use std::collections::{VecDeque, HashMap};
+use std::collections::{HashMap, VecDeque};
 
 use eframe::egui::{self, CentralPanel, Context, TopBottomPanel, ViewportBuilder, Window};
 
-use project::{OpenProjectMenu, Project};
 use net::Object;
+use project::{OpenProjectMenu, Project};
 
 struct App {
     projects: Vec<Project>,
@@ -43,7 +43,7 @@ impl eframe::App for App {
 
                 let mut remove: Option<usize> = None;
 
-                for i in 0..self.projects.len() {   
+                for i in 0..self.projects.len() {
                     ui.spacing_mut().item_spacing.x = 0.0;
 
                     if ui.button(&self.projects[i].name).clicked() {
@@ -61,7 +61,6 @@ impl eframe::App for App {
                     self.projects.remove(i);
                     self.current = if i == 0 { 0 } else { i - 1 };
                 }
-
 
                 if ui.button("+").clicked() {
                     self.should_open = true;
@@ -108,11 +107,7 @@ impl eframe::App for App {
         }
 
         CentralPanel::default().show(ctx, |ui| {
-            self.projects[self.current].render(
-                ui,
-                &mut self.errors,
-                &mut self.clipboard
-            )
+            self.projects[self.current].render(ui, &mut self.errors, &mut self.clipboard)
         });
     }
 }

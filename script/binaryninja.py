@@ -1,7 +1,6 @@
 import json
 import socket
 import select
-import traceback
 
 from binaryninja import (
     TypeClass,
@@ -18,7 +17,7 @@ from binaryninja import (
 #       CONFIG
 # --------------------
 PORT_NUMBER = 12007
-INIT_SYNC_BATCH = 50
+INIT_SYNC_BATCH = 500
 # --------------------
 
 
@@ -266,14 +265,14 @@ def lower_and_add_objects(objects: dict):
     lower_and_add_globals(objects)
 
 def remove_object(name: str):
-    funcs = bv.get_function_by_name(name)
+    funcs = bv.get_functions_by_name(name)
     
     if funcs:
         bv.remove_user_function(funcs[0])
     
     bv.undefine_user_type(name)
     
-    for var in bv.data_vars:
+    for var in bv.data_vars.values():
         if var.name == name:
             bv.remove_user_data_var(var.address)
 
@@ -378,7 +377,6 @@ class NetworkHandler(BackgroundTaskThread):
     def handle_message(self, message):
         kind = message["kind"]
         
-        #TODO: Handle each message
         if kind == "push":
             lower_and_add_objects(message["objects"])
         if kind == "delete":
@@ -399,11 +397,7 @@ class NetworkHandler(BackgroundTaskThread):
                 if connection == self.connections[0]:
                     s, _ = connection.accept()
                     
-                    try:
-                        self.init_connection(Connection(s))
-                    except:
-                        traceback.print_exc()
-                        self.close(connection)
+                    self.init_connection(Connection(s))
                 else:
                     try:
                         data = connection.recv()
@@ -414,11 +408,7 @@ class NetworkHandler(BackgroundTaskThread):
                     if not data:
                         continue
 
-                    try:
-                        self.handle_message(data)
-                    except:
-                        traceback.print_exc()
-                        self.close(connection)
+                    self.handle_message(data)
 
             for connection in error:
                 self.close(connection)

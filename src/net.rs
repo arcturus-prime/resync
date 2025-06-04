@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use std::{
+    collections::HashMap,
     io::{BufRead, BufReader, Write},
     net::{SocketAddrV4, TcpStream},
     sync::mpsc::{self, Receiver},
-    collections::HashMap,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -16,14 +16,20 @@ pub struct EnumValue {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Argument {
     pub name: String,
-    pub arg_type: String,
+    pub r#type: TypeRef,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StructField {
     pub name: String,
     pub offset: usize,
-    pub field_type: String,
+    pub r#type: TypeRef,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UnionField {
+    pub name: String,
+    pub r#type: TypeRef,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -31,15 +37,11 @@ pub struct StructField {
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum TypeInfo {
     Typedef {
-        alias_type: String,
-    },
-    Pointer {
-        to_type: String,
-        depth: usize,
+        r#type: TypeRef,
     },
     Function {
-        arg_types: Vec<String>,
-        return_type: String,
+        arg_types: Vec<TypeRef>,
+        r#type: TypeRef,
     },
     Struct {
         fields: Vec<StructField>,
@@ -47,13 +49,24 @@ pub enum TypeInfo {
     Enum {
         values: Vec<EnumValue>,
     },
-    Array {
-        item_type: String,
+    Union {
+        fields: Vec<UnionField>,
     },
-    Int,
-    Uint,
-    Float,
-    Bool,
+    Array {
+        r#type: TypeRef,
+        count: usize,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "kind")]
+#[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
+pub enum TypeRef {
+    Value { name: String },
+    Pointer { depth: u8, name: String },
+    Uint { size: u16 },
+    Int { size: u16 },
+    Float { size: u16 },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -68,11 +81,11 @@ pub enum Object {
     Function {
         location: usize,
         arguments: Vec<Argument>,
-        return_type: String,
+        return_type: TypeRef,
     },
-    Global {
+    Data {
         location: usize,
-        global_type: String,
+        r#type: TypeRef,
     },
 }
 
@@ -80,7 +93,6 @@ pub enum Object {
 #[serde(tag = "kind")]
 #[serde(rename_all(deserialize = "lowercase", serialize = "lowercase"))]
 pub enum Message {
-    Delete { name: String },
     Push { objects: HashMap<String, Object> },
 }
 
@@ -106,13 +118,13 @@ impl Client {
                 Ok(size) => size,
                 Err(e) => {
                     log::error!("Error reading from stream: {}", e);
-                    continue;
+                    return;
                 }
             };
 
             if size == 0 {
                 log::error!("Socket disconnected");
-                return
+                return;
             }
 
             let message = match serde_json::from_slice(&buffer) {
@@ -134,7 +146,7 @@ impl Client {
                     Ok(o) => o,
                     Err(e) => {
                         log::error!("Error while serializing message: {}", e);
-                        continue
+                        continue;
                     }
                 };
 
@@ -142,7 +154,7 @@ impl Client {
 
                 if let Err(_) = stream.write_all(&buffer) {
                     log::error!("Socket disconnected");
-                    return
+                    return;
                 }
             }
         });
