@@ -124,7 +124,7 @@ pub struct Project {
     current_tab: Tab,
 
     kind: ProjectKind,
-    data: Database,
+    db: Database,
 }
 
 impl Project {
@@ -147,13 +147,13 @@ impl Project {
             kind,
             current_tab: Tab::Types,
             selected: HashSet::new(),
-            data,
+            db: data,
         })
     }
 
     pub fn save(&self, errors: &mut VecDeque<String>) {
         let result = match &self.kind {
-            ProjectKind::Local(path) => self.data.save(&path),
+            ProjectKind::Local(path) => self.db.save(&path),
             ProjectKind::Remote(_) => Ok(()),
         };
 
@@ -168,9 +168,9 @@ impl Project {
 
         for name in &self.selected {
             let objects = match self.current_tab {
-                Tab::Types => self.data.types_get_net(name),
-                Tab::Functions => self.data.functions_get_net(name),
-                Tab::Globals => self.data.globals_get_net(name),
+                Tab::Types => self.db.types_get_net(name),
+                Tab::Functions => self.db.functions_get_net(name),
+                Tab::Globals => self.db.globals_get_net(name),
             };
 
             data.extend(objects);
@@ -182,7 +182,7 @@ impl Project {
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: HashMap<String, Object>) {
-        self.data.push_net(data.clone());
+        self.db.push_net(data.clone());
 
         if let ProjectKind::Remote(client) = &mut self.kind {
             let result = client.tx.send(Message::Push { objects: data });
@@ -196,13 +196,13 @@ impl Project {
     // Delets an object by name from the project
     pub fn delete_object(&mut self, name: &str) {
         if let ProjectKind::Remote(_) = &self.kind {
-            return
+            return;
         }
 
         match self.current_tab {
-            Tab::Types => self.data.types_delete(name),
-            Tab::Functions => self.data.functions_delete(name),
-            Tab::Globals => self.data.globals_delete(name),
+            Tab::Types => self.db.types.delete(name),
+            Tab::Functions => self.db.functions.delete(name),
+            Tab::Globals => self.db.data.delete(name),
         };
     }
 
@@ -252,35 +252,50 @@ impl Project {
         });
 
         match self.current_tab {
-            Tab::Types => Self::render_main_view(&mut self.selected, ui, self.data.types_len(), self.data.types_name()),
-            Tab::Functions => Self::render_main_view(&mut self.selected, ui, self.data.functions_len(), self.data.functions_name()),
-            Tab::Globals => Self::render_main_view(&mut self.selected, ui, self.data.globals_len(), self.data.globals_name()),
+            Tab::Types => Self::render_main_view(
+                &mut self.selected,
+                ui,
+                self.db.types.len(),
+                self.db.types.iter().map(|t| &t.name),
+            ),
+            Tab::Functions => Self::render_main_view(
+                &mut self.selected,
+                ui,
+                self.db.functions.len(),
+                self.db.functions.iter().map(|f| &f.name()),
+            ),
+            Tab::Globals => Self::render_main_view(
+                &mut self.selected,
+                ui,
+                self.db.data.len(),
+                self.db.data.iter().map(|d| &d.name),
+            ),
         };
     }
 
-    fn render_main_view<'a, I: Iterator<Item = &'a String>>(selected: &mut HashSet<String>, ui: &mut Ui, len: usize, iter: I) {
+    fn render_main_view<'a, I: Iterator<Item = &'a String>>(
+        selected: &mut HashSet<String>,
+        ui: &mut Ui,
+        len: usize,
+        iter: I,
+    ) {
         let text_style = ui.text_style_height(&egui::TextStyle::Body);
 
         ui.columns(2, |ui| {
-            egui::ScrollArea::vertical().show_rows(
-                &mut ui[0],
-                text_style,
-                len,
-                |ui, row_range| {
-                    let names = iter.skip(row_range.start).take(row_range.count());
+            egui::ScrollArea::vertical().show_rows(&mut ui[0], text_style, len, |ui, row_range| {
+                let names = iter.skip(row_range.start).take(row_range.count());
 
-                    for name in names {
-                        let is_selected = selected.contains(name);
-                        let label = ui.selectable_label(is_selected, name);
+                for name in names {
+                    let is_selected = selected.contains(name);
+                    let label = ui.selectable_label(is_selected, name);
 
-                        if label.clicked() && is_selected {
-                            selected.remove(name);
-                        } else if label.clicked() && !is_selected {
-                            selected.insert(name.clone());
-                        }
+                    if label.clicked() && is_selected {
+                        selected.remove(name);
+                    } else if label.clicked() && !is_selected {
+                        selected.insert(name.clone());
                     }
-                },
-            );
+                }
+            });
         })
     }
 
@@ -296,7 +311,7 @@ impl Project {
             };
 
             match message {
-                Message::Push { objects } => self.data.push_net(objects),
+                Message::Push { objects } => self.db.push_net(objects),
             }
         }
     }

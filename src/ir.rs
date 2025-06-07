@@ -77,7 +77,7 @@ enum TypeInfo {
 
 #[derive(Serialize, Deserialize)]
 struct Type {
-    name: String,
+    pub name: String,
     size: usize,
     alignment: usize,
     info: TypeInfo,
@@ -104,7 +104,7 @@ enum Instruction {
 
 #[derive(Serialize, Deserialize)]
 struct Function {
-    name: String,
+    pub name: String,
     code: Vec<Instruction>,
 
     location: usize,
@@ -130,15 +130,15 @@ impl Default for Function {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Global {
-    name: String,
+struct Data {
+    pub name: String,
     location: usize,
     r#type: TypeRef,
 }
 
-impl Default for Global {
+impl Default for Data {
     fn default() -> Self {
-        Global {
+        Data {
             name: String::new(),
             location: 0,
             r#type: TypeRef::Uint(0),
@@ -147,14 +147,60 @@ impl Default for Global {
 }
 
 #[derive(Default, Serialize, Deserialize)]
-pub struct Database {
-    functions: Vec<Function>,
-    types: Vec<Type>,
-    data: Vec<Global>,
+struct IdVec<T> {
+    array: Vec<T>,
+    reverse_lookup: Vec<usize>,
 
-    function_lookup: HashMap<String, usize>,
-    type_lookup: HashMap<String, usize>,
-    data_lookup: HashMap<String, usize>,
+    lookup: Vec<usize>,
+    holes: Vec<usize>,
+}
+
+impl<T> IdVec<T> {
+    pub fn push(&mut self, item: T) -> usize {
+        let id;
+
+        self.array.push(item);
+
+        if let Some(hole) = self.holes.pop() {
+            id = hole;
+            self.lookup[id] = self.reverse_lookup.len();
+            self.reverse_lookup.push(id);
+        } else {
+            id = self.lookup.len();
+            self.lookup.push(self.reverse_lookup.len());
+            self.reverse_lookup.push(id);
+        }
+
+        id
+    }
+
+    pub fn delete(&mut self, id: usize) {
+        let index = self.lookup[id];
+
+        self.lookup[*self.reverse_lookup.last().unwrap()] = index;
+        self.array.swap_remove(index);
+        self.reverse_lookup.swap_remove(index);
+        self.holes.push(id);
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> + '_ {
+        self.array.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> + '_ {
+        self.array.iter_mut()
+    }
+
+    pub fn len(&self) -> usize {
+        self.array.len()
+    }
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Database {
+    pub functions: IdVec<Function>,
+    pub types: IdVec<Type>,
+    pub data: IdVec<Data>,
 }
 
 impl Database {
@@ -181,213 +227,5 @@ impl Database {
         file.write_all(&data)?;
 
         Ok(())
-    }
-
-    pub fn types_len(&self) -> usize {
-        self.types.len()
-    }
-
-    pub fn types_name(&self) -> impl Iterator<Item = &String> + '_ {
-        self.types.iter().map(|t| &t.name)
-    }
-
-    pub fn types_get_net(&self, name: &str) -> HashMap<String, Object> {
-        let mut map = HashMap::new();
-        let mut lifted = HashSet::new();
-        let mut to_lift = vec![self.type_lookup[name]];
-
-        while !to_lift.is_empty() {
-            let index = to_lift.pop().unwrap();
-
-            if lifted.contains(&index) {
-                continue;
-            }
-            lifted.insert(index);
-
-            let r#type = &self.types[index];
-
-            let lifted_type: net::Object = match &r#type.info {
-                TypeInfo::Struct(struct_members) => todo!(),
-                TypeInfo::Enum(enum_values) => todo!(),
-                TypeInfo::Union(union_members) => todo!(),
-                TypeInfo::TypeDef(type_ref) => todo!(),
-                TypeInfo::Function(type_refs, type_ref) => todo!(),
-                TypeInfo::Array(type_ref, _) => todo!(),
-            };
-
-            map.insert(r#type.name.clone(), lifted_type);
-        }
-
-        map
-    }
-
-    pub fn types_delete(&mut self, name: &str) {
-        todo!();
-    }
-
-    pub fn functions_len(&self) -> usize {
-        self.functions.len()
-    }
-
-    pub fn functions_name(&self) -> impl Iterator<Item = &String> + '_ {
-        self.functions.iter().map(|t| &t.name)
-    }
-
-    pub fn functions_get_net(&self, name: &str) -> HashMap<String, Object> {
-        let mut map = HashMap::new();
-
-        todo!();
-
-        map
-    }
-
-    pub fn functions_delete(&mut self, name: &str) {
-        todo!();
-    }
-
-    pub fn globals_len(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn globals_name(&self) -> impl Iterator<Item = &String> + '_ {
-        self.data.iter().map(|t| &t.name)
-    }
-
-    pub fn globals_get_net(&self, name: &str) -> HashMap<String, Object> {
-        let mut map = HashMap::new();
-
-        todo!();
-
-        map
-    }
-
-    pub fn globals_delete(&mut self, name: &str) {
-        todo!();
-    }
-
-    fn lift_type_ref(&self, type_ref: &net::TypeRef) -> TypeRef {
-        match type_ref {
-            net::TypeRef::Value { name } => {
-                let index = self.type_lookup[name];
-                TypeRef::Value(index)
-            }
-            net::TypeRef::Pointer { depth, name } => {
-                let index = self.type_lookup[name];
-                TypeRef::Pointer(*depth, index)
-            }
-            net::TypeRef::Uint { size } => TypeRef::Uint(*size),
-            net::TypeRef::Int { size } => TypeRef::Int(*size),
-            net::TypeRef::Float { size } => TypeRef::Float(*size),
-        }
-    }
-
-    fn reserve_object<T: Default>(
-        index_lookup: &mut HashMap<String, usize>,
-        objects: &mut Vec<T>,
-        name: &String,
-    ) {
-        if index_lookup.get(name).is_none() {
-            objects.push(T::default());
-            index_lookup.insert(name.clone(), objects.len() - 1);
-        }
-    }
-
-    pub fn push_net(&mut self, objects: HashMap<String, Object>) {
-        // we need to create stubs for each object to support circular dependencies
-        for (name, obj) in &objects {
-            match obj {
-                Object::Type { .. } => {
-                    Self::reserve_object(&mut self.type_lookup, &mut self.types, &name)
-                }
-                Object::Function { .. } => {
-                    Self::reserve_object(&mut self.function_lookup, &mut self.functions, &name);
-                }
-                Object::Data { .. } => {
-                    Self::reserve_object(&mut self.data_lookup, &mut self.data, &name);
-                }
-            }
-        }
-
-        // now fill out each object
-        for (name, obj) in objects {
-            match obj {
-                Object::Type {
-                    info,
-                    size,
-                    alignment,
-                } => {
-                    let index = self.type_lookup[&name];
-
-                    self.types[index].name = name;
-                    self.types[index].size = size;
-                    self.types[index].alignment = alignment;
-
-                    self.types[index].info = match info {
-                        net::TypeInfo::Typedef { r#type } => {
-                            TypeInfo::TypeDef(self.lift_type_ref(&r#type))
-                        }
-                        net::TypeInfo::Function { arg_types, r#type } => TypeInfo::Function(
-                            arg_types.iter().map(|t| self.lift_type_ref(t)).collect(),
-                            self.lift_type_ref(&r#type),
-                        ),
-                        net::TypeInfo::Struct { fields } => TypeInfo::Struct(
-                            fields
-                                .into_iter()
-                                .map(|f| StructMember {
-                                    name: f.name,
-                                    offset: f.offset,
-                                    r#type: self.lift_type_ref(&f.r#type),
-                                })
-                                .collect(),
-                        ),
-                        net::TypeInfo::Enum { values } => TypeInfo::Enum(
-                            values
-                                .into_iter()
-                                .map(|v| EnumValue {
-                                    name: v.name,
-                                    value: v.value,
-                                })
-                                .collect(),
-                        ),
-                        net::TypeInfo::Array { r#type, count } => {
-                            TypeInfo::Array(self.lift_type_ref(&r#type), count)
-                        }
-                        net::TypeInfo::Union { fields } => TypeInfo::Union(
-                            fields
-                                .into_iter()
-                                .map(|f| UnionMember {
-                                    name: f.name,
-                                    r#type: self.lift_type_ref(&f.r#type),
-                                })
-                                .collect(),
-                        ),
-                    };
-                }
-                Object::Function {
-                    arguments,
-                    return_type: r#type,
-                    location,
-                } => {
-                    let index = self.function_lookup[&name];
-
-                    self.functions[index].location = location;
-                    self.functions[index].name = name;
-                    self.functions[index].return_type = self.lift_type_ref(&r#type);
-                    self.functions[index].argument_types = arguments
-                        .iter()
-                        .map(|t| self.lift_type_ref(&t.r#type))
-                        .collect();
-                    self.functions[index].argument_names =
-                        arguments.iter().map(|t| t.name.clone()).collect();
-                }
-                Object::Data { r#type, location } => {
-                    let index = self.data_lookup[&name];
-
-                    self.data[index].location = location;
-                    self.data[index].name = name;
-                    self.data[index].r#type = self.lift_type_ref(&r#type);
-                }
-            }
-        }
     }
 }
