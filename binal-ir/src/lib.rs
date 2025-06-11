@@ -1,5 +1,4 @@
 use std::{
-    fmt::Display,
     fs::{File, OpenOptions},
     io::{Read, Write},
     path::Path,
@@ -7,48 +6,22 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
-pub enum DatabaseError {
-    Io(std::io::Error),
-    Serde(serde_json::Error),
-}
-
-impl From<std::io::Error> for DatabaseError {
-    fn from(value: std::io::Error) -> Self {
-        Self::Io(value)
-    }
-}
-
-impl From<serde_json::Error> for DatabaseError {
-    fn from(value: serde_json::Error) -> Self {
-        Self::Serde(value)
-    }
-}
-
-impl<'a> Display for DatabaseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DatabaseError::Io(e) => e.fmt(f),
-            DatabaseError::Serde(e) => e.fmt(f),
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize)]
-struct StructMember {
+// TODO: Fix unwraps
+pub struct StructMember {
     pub name: String,
     pub r#type: TypeRef,
     pub offset: usize,
 }
 
 #[derive(Serialize, Deserialize)]
-struct EnumValue {
+pub struct EnumValue {
     pub name: String,
     pub value: usize,
 }
 
 #[derive(Serialize, Deserialize)]
-struct UnionMember {
+pub struct UnionMember {
     pub name: String,
     pub r#type: TypeRef,
 }
@@ -73,7 +46,7 @@ pub enum TypeInfo {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Type {
+pub struct Type {
     pub name: String,
     pub size: usize,
     pub alignment: usize,
@@ -100,7 +73,7 @@ enum Instruction {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Function {
+pub struct Function {
     pub name: String,
     pub code: Vec<u32>,
 }
@@ -115,7 +88,7 @@ impl Default for Function {
 }
 
 #[derive(Serialize, Deserialize)]
-struct Data {
+pub struct Data {
     pub name: String,
     pub location: usize,
     pub r#type: TypeRef,
@@ -197,29 +170,28 @@ pub struct Database {
     pub data: IdVec<Data>,
 }
 
+// TODO: Fix unwraps
 impl Database {
-    pub fn open(path: &Path) -> Result<Self, DatabaseError> {
-        let mut project_file = File::open(&path)?;
+    pub fn open(path: &Path) -> Self {
+        let mut project_file = File::open(&path).unwrap();
         let mut project_data = Vec::<u8>::new();
 
-        project_file.read_to_end(&mut project_data)?;
-        let db: Database = serde_json::from_slice(project_data.as_slice())?;
+        project_file.read_to_end(&mut project_data).unwrap();
+        let db: Database = serde_json::from_slice(project_data.as_slice()).unwrap();
 
-        Ok(db)
+        db
     }
 
-    pub fn save(&self, path: &Path) -> Result<(), DatabaseError> {
+    pub fn save(&self, path: &Path) {
         let mut file;
 
         if !path.exists() {
-            file = File::create(path)?;
+            file = File::create(path).unwrap();
         } else {
-            file = OpenOptions::new().write(true).open(path)?;
+            file = OpenOptions::new().write(true).open(path).unwrap();
         }
 
-        let data = serde_json::to_vec(&self)?;
-        file.write_all(&data)?;
-
-        Ok(())
+        let data = serde_json::to_vec(&self).unwrap();
+        file.write_all(&data).unwrap();
     }
 }

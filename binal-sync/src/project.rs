@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fmt::Display,
     fs::{File, OpenOptions},
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4},
@@ -10,10 +11,7 @@ use std::{
 use eframe::egui::{self, Ui};
 use rfd::FileDialog;
 
-use crate::{
-    ir::{Database, DatabaseError},
-    net::{self, Client, Message, Object},
-};
+use crate::net::{Client, Message, Object};
 
 #[derive(Default)]
 pub struct OpenProjectMenu {
@@ -108,13 +106,6 @@ impl OpenProjectMenu {
     }
 }
 
-struct Database {
-    objects: Vec<Object>,
-    names: Vec<String>,
-
-    lookup: HashMap<String, usize>,
-}
-
 impl Default for Database {
     fn default() -> Self {
         Self {
@@ -125,16 +116,64 @@ impl Default for Database {
     }
 }
 
+#[derive(Debug)]
+pub enum DatabaseError {
+    Io(std::io::Error),
+    Serde(serde_json::Error),
+}
+
+impl From<std::io::Error> for DatabaseError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<serde_json::Error> for DatabaseError {
+    fn from(value: serde_json::Error) -> Self {
+        Self::Serde(value)
+    }
+}
+
+impl<'a> Display for DatabaseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DatabaseError::Io(e) => e.fmt(f),
+            DatabaseError::Serde(e) => e.fmt(f),
+        }
+    }
+}
+
+struct Database {
+    objects: Vec<Object>,
+    names: Vec<String>,
+    lookup: HashMap<String, usize>,
+}
+
 impl Database {
     pub fn open(path: &Path) -> Result<Self, DatabaseError> {
         let mut project_file = File::open(&path)?;
         let mut project_data = Vec::<u8>::new();
 
         project_file.read_to_end(&mut project_data)?;
-        let objects: HashMap<String, Object> = serde_json::from_slice(project_data.as_slice())?;
-        let lookup = HashMap::new();
+        let data: HashMap<String, Object> = serde_json::from_slice(project_data.as_slice())?;
 
-        Ok(Database { objects, lookup })
+        let mut lookup = HashMap::new();
+        let mut objects = Vec::new();
+        let mut names = Vec::new();
+
+        for (name, object) in data {
+            let index = objects.len();
+            objects.push(object);
+
+            names.push(name.clone());
+            lookup.insert(name, index);
+        }
+
+        Ok(Database {
+            objects,
+            lookup,
+            names,
+        })
     }
 
     pub fn save(&self, path: &Path) -> Result<(), DatabaseError> {
@@ -144,6 +183,12 @@ impl Database {
             file = File::create(path)?;
         } else {
             file = OpenOptions::new().write(true).open(path)?;
+        }
+
+        let mut table = HashMap::new();
+
+        for (name, object) in self.objects.iter().zip(self.names.iter()) {
+            table.insert(name, object);
         }
 
         let data = serde_json::to_vec(&self.objects)?;
@@ -157,13 +202,15 @@ impl Database {
     }
 
     pub fn name_iter(&self) -> impl Iterator<Item = &String> + '_ {
-        self.objects.iter().map(|obj| &obj.name)
+        self.names.iter()
     }
 
+    // TODO: Retreive all dependency types
     pub fn get(&self, name: &str) -> Result<HashMap<String, Object>, DatabaseError> {
         let mut map = HashMap::new();
 
-        map.insert(name.to_string(), self.objects[name].clone());
+        let index = self.lookup[name];
+        map.insert(name.to_string(), self.objects[index].clone());
 
         Ok(map)
     }
@@ -258,16 +305,6 @@ impl Project {
         if let Err(e) = self.db.delete(name) {
             log::error!("Could not delete object: {}", e);
             return;
-        }
-
-        let ProjectKind::Remote(client) = &self.kind else {
-            return;
-        };
-
-        if let Err(e) = client.tx.send(Message::Delete {
-            name: name.to_string(),
-        }) {
-            log::error!("Could not queue delete message for network: {}", e);
         }
     }
 

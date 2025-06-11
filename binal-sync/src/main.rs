@@ -1,4 +1,3 @@
-mod ir;
 mod net;
 mod project;
 
