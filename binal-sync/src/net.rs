@@ -1,3 +1,4 @@
+use eframe::egui::ahash::HashSet;
 use serde::{Deserialize, Serialize};
 
 use std::{
@@ -7,7 +8,7 @@ use std::{
     sync::mpsc::{self, Receiver},
 };
 
-use crate::ir;
+use crate::ir::{self, IdVec};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EnumValue {
@@ -101,6 +102,10 @@ pub enum Message {
 pub struct Client {
     pub rx: mpsc::Receiver<Message>,
     pub tx: mpsc::Sender<Message>,
+
+    pub lookup_types: HashMap<String, usize>,
+    pub lookup_functions: HashMap<String, usize>,
+    pub lookup_data: HashMap<String, usize>,
 }
 
 impl Client {
@@ -168,28 +173,56 @@ impl Client {
     }
 }
 
-pub fn get_net_from_db(db: &ir::Database, id: usize) -> HashMap<String, Object> {
+pub fn get_net_type_from_db(db: &ir::Database, id: usize) -> HashMap<String, Object> {
     let mut map = HashMap::new();
     let mut lifted = HashSet::new();
     let mut to_lift = vec![id];
 
     while !to_lift.is_empty() {
-        let index = to_lift.pop().unwrap();
+        let id = to_lift.pop().unwrap();
 
-        if lifted.contains(&index) {
+        if lifted.contains(&id) {
             continue;
         }
-        lifted.insert(index);
+        lifted.insert(id);
 
-        let r#type = &db.types[index];
+        let r#type = db.types.get(id);
 
-        let lifted_type: Object = match &r#type.info {
-            TypeInfo::Struct(struct_members) => todo!(),
-            TypeInfo::Enum(enum_values) => todo!(),
-            TypeInfo::Union(union_members) => todo!(),
-            TypeInfo::TypeDef(type_ref) => todo!(),
-            TypeInfo::Function(type_refs, type_ref) => todo!(),
-            TypeInfo::Array(type_ref, _) => todo!(),
+        let lifted_type: Object;
+        match r#type.info {
+            ir::TypeInfo::Struct(fields) => {
+                let mut lifted_fields = Vec::new();
+                for field in fields {
+                    lifted_fields.push(StructField {
+                        name: field.name.clone(),
+                        r#type: lift_type_ref(db, &field.r#type),
+                        offset: field.offset,
+                    });
+                }
+
+                lifted_type = Object::Type {
+                    info: TypeInfo::Struct {
+                        fields: lifted_fields,
+                    },
+                    size: r#type.size,
+                    alignment: r#type.alignment,
+                };
+            }
+            ir::TypeInfo::Array(element_type, count) => {
+                let lifted_element_type = lift_type_ref(db, &element_type);
+
+                lifted_type = Object::Type {
+                    info: TypeInfo::Array {
+                        r#type: lifted_element_type,
+                        count,
+                    },
+                    size: lifted_element_type.size * count,
+                };
+            }
+            ir::TypeInfo::Enum(enum_values) => todo!(),
+            ir::TypeInfo::Union(union_members) => todo!(),
+            ir::TypeInfo::TypeDef(type_ref) => todo!(),
+            ir::TypeInfo::Function(type_refs, type_ref) => todo!(),
         };
 
         map.insert(r#type.name.clone(), lifted_type);
@@ -197,45 +230,37 @@ pub fn get_net_from_db(db: &ir::Database, id: usize) -> HashMap<String, Object> 
 
     map
 }
-fn lift_type_ref(db: &ir::Database, type_ref: &TypeRef) -> TypeRef {
+fn lift_type_ref(db: &ir::Database, type_ref: &ir::TypeRef) -> TypeRef {
     match type_ref {
-        TypeRef::Value { name } => {
-            let index = self.type_lookup[name];
-            TypeRef::Value(index)
-        }
-        TypeRef::Pointer { depth, name } => {
-            let index = self.type_lookup[name];
-            TypeRef::Pointer(*depth, index)
-        }
-        TypeRef::Uint { size } => TypeRef::Uint(*size),
-        TypeRef::Int { size } => TypeRef::Int(*size),
-        TypeRef::Float { size } => TypeRef::Float(*size),
+        ir::TypeRef::Int(_) => todo!(),
+        ir::TypeRef::Uint(_) => todo!(),
+        ir::TypeRef::Float(_) => todo!(),
+        ir::TypeRef::Value(_) => todo!(),
+        ir::TypeRef::Pointer(_, _) => todo!(),
     }
 }
 
 fn reserve_object<T: Default>(
     index_lookup: &mut HashMap<String, usize>,
-    objects: &mut Vec<T>,
+    objects: &mut IdVec<T>,
     name: &String,
 ) {
     if index_lookup.get(name).is_none() {
-        objects.push(T::default());
-        index_lookup.insert(name.clone(), objects.len() - 1);
+        let id = objects.push(T::default());
+        index_lookup.insert(name.clone(), id);
     }
 }
 
-pub fn push_net(&mut self, objects: HashMap<String, Object>) {
+pub fn lower_net(db: &mut ir::Database, objects: HashMap<String, Object>) {
     // we need to create stubs for each object to support circular dependencies
     for (name, obj) in &objects {
         match obj {
-            Object::Type { .. } => {
-                Self::reserve_object(&mut self.type_lookup, &mut self.types, &name)
-            }
+            Object::Type { .. } => reserve_object(&mut self.type_lookup, &mut self.types, &name),
             Object::Function { .. } => {
-                Self::reserve_object(&mut self.function_lookup, &mut self.functions, &name);
+                reserve_object(&mut self.function_lookup, &mut self.functions, &name);
             }
             Object::Data { .. } => {
-                Self::reserve_object(&mut self.data_lookup, &mut self.data, &name);
+                reserve_object(&mut self.data_lookup, &mut self.data, &name);
             }
         }
     }
@@ -250,15 +275,15 @@ pub fn push_net(&mut self, objects: HashMap<String, Object>) {
             } => {
                 let index = self.type_lookup[&name];
 
-                self.types[index].name = name;
-                self.types[index].size = size;
-                self.types[index].alignment = alignment;
+                db.types.get(index).name = name;
+                db.types.get(index).size = size;
+                db.types.get(index).alignment = alignment;
 
-                self.types[index].info = match info {
-                    TypeInfo::Typedef { r#type } => TypeInfo::TypeDef(self.lift_type_ref(&r#type)),
+                db.types.get(index).info = match info {
+                    TypeInfo::Typedef { r#type } => TypeInfo::TypeDef(db.lift_type_ref(&r#type)),
                     TypeInfo::Function { arg_types, r#type } => TypeInfo::Function(
-                        arg_types.iter().map(|t| self.lift_type_ref(t)).collect(),
-                        self.lift_type_ref(&r#type),
+                        arg_types.iter().map(|t| lift_type_ref(db, t)).collect(),
+                        lift_type_ref(&r#type),
                     ),
                     TypeInfo::Struct { fields } => TypeInfo::Struct(
                         fields
@@ -266,7 +291,7 @@ pub fn push_net(&mut self, objects: HashMap<String, Object>) {
                             .map(|f| StructMember {
                                 name: f.name,
                                 offset: f.offset,
-                                r#type: self.lift_type_ref(&f.r#type),
+                                r#type: db.lift_type_ref(&f.r#type),
                             })
                             .collect(),
                     ),
@@ -280,14 +305,14 @@ pub fn push_net(&mut self, objects: HashMap<String, Object>) {
                             .collect(),
                     ),
                     TypeInfo::Array { r#type, count } => {
-                        TypeInfo::Array(self.lift_type_ref(&r#type), count)
+                        TypeInfo::Array(db.lift_type_ref(&r#type), count)
                     }
                     TypeInfo::Union { fields } => TypeInfo::Union(
                         fields
                             .into_iter()
                             .map(|f| UnionMember {
                                 name: f.name,
-                                r#type: self.lift_type_ref(&f.r#type),
+                                r#type: db.lift_type_ref(&f.r#type),
                             })
                             .collect(),
                     ),
@@ -298,24 +323,24 @@ pub fn push_net(&mut self, objects: HashMap<String, Object>) {
                 return_type: r#type,
                 location,
             } => {
-                let index = self.function_lookup[&name];
+                let index = db.function_lookup[&name];
 
-                self.functions[index].location = location;
-                self.functions[index].name = name;
-                self.functions[index].return_type = self.lift_type_ref(&r#type);
-                self.functions[index].argument_types = arguments
+                db.functions.get(index).location = location;
+                db.functions.get(index).name = name;
+                db.functions.get(index).return_type = self.lift_type_ref(&r#type);
+                db.functions.get(index).argument_types = arguments
                     .iter()
-                    .map(|t| self.lift_type_ref(&t.r#type))
+                    .map(|t| db.lift_type_ref(&t.r#type))
                     .collect();
-                self.functions[index].argument_names =
+                db.functions.get(index).argument_names =
                     arguments.iter().map(|t| t.name.clone()).collect();
             }
             Object::Data { r#type, location } => {
-                let index = self.data_lookup[&name];
+                let index = db.data_lookup[&name];
 
-                self.data[index].location = location;
-                self.data[index].name = name;
-                self.data[index].r#type = self.lift_type_ref(&r#type);
+                db.data.get(index).location = location;
+                db.data.get(index).name = name;
+                db.data.get(index).r#type = self.lift_type_ref(&r#type);
             }
         }
     }

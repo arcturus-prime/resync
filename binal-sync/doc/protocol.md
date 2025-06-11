@@ -1,5 +1,5 @@
 # Plugin Protocol
-Communication with the client is done over TCP. Every interaction is sent as a JSON object. We refer to these objects as messages. Messages are always newline-separated and single-line. The rationale for JSON messages is that Python has a built-in JSON parser, so plugin developers can avoid the headache of custom parsing.
+Communication with the client is done over TCP. Every interaction is sent as a JSON object, which we refer to as messages. Messages are always newline-separated and single-line. The rationale for JSON messages is that Python has a built-in JSON parser, so plugin developers can avoid the headache of custom parsing.
 
 ## Messages
 Every message contains a `kind` field that denotes what kind of message it is. Any additional fields are then assigned depending on the kind.

@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet},
     fmt::Display,
     fs::{File, OpenOptions},
     io::{Read, Write},
@@ -7,8 +6,6 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-
-use crate::net::{self, Object};
 
 #[derive(Debug)]
 pub enum DatabaseError {
@@ -39,25 +36,25 @@ impl<'a> Display for DatabaseError {
 
 #[derive(Serialize, Deserialize)]
 struct StructMember {
-    name: String,
-    r#type: TypeRef,
-    offset: usize,
+    pub name: String,
+    pub r#type: TypeRef,
+    pub offset: usize,
 }
 
 #[derive(Serialize, Deserialize)]
 struct EnumValue {
-    name: String,
-    value: usize,
+    pub name: String,
+    pub value: usize,
 }
 
 #[derive(Serialize, Deserialize)]
 struct UnionMember {
-    name: String,
-    r#type: TypeRef,
+    pub name: String,
+    pub r#type: TypeRef,
 }
 
 #[derive(Serialize, Deserialize)]
-enum TypeRef {
+pub enum TypeRef {
     Int(u16),
     Uint(u16),
     Float(u16),
@@ -66,7 +63,7 @@ enum TypeRef {
 }
 
 #[derive(Serialize, Deserialize)]
-enum TypeInfo {
+pub enum TypeInfo {
     Struct(Vec<StructMember>),
     Enum(Vec<EnumValue>),
     Union(Vec<UnionMember>),
@@ -78,9 +75,9 @@ enum TypeInfo {
 #[derive(Serialize, Deserialize)]
 struct Type {
     pub name: String,
-    size: usize,
-    alignment: usize,
-    info: TypeInfo,
+    pub size: usize,
+    pub alignment: usize,
+    pub info: TypeInfo,
 }
 
 impl Default for Type {
@@ -105,13 +102,7 @@ enum Instruction {
 #[derive(Serialize, Deserialize)]
 struct Function {
     pub name: String,
-    code: Vec<Instruction>,
-
-    location: usize,
-
-    return_type: TypeRef,
-    argument_names: Vec<String>,
-    argument_types: Vec<TypeRef>,
+    pub code: Vec<u32>,
 }
 
 impl Default for Function {
@@ -119,12 +110,6 @@ impl Default for Function {
         Function {
             name: String::new(),
             code: Vec::new(),
-
-            location: 0,
-
-            return_type: TypeRef::Uint(0),
-            argument_names: Vec::new(),
-            argument_types: Vec::new(),
         }
     }
 }
@@ -132,8 +117,8 @@ impl Default for Function {
 #[derive(Serialize, Deserialize)]
 struct Data {
     pub name: String,
-    location: usize,
-    r#type: TypeRef,
+    pub location: usize,
+    pub r#type: TypeRef,
 }
 
 impl Default for Data {
@@ -146,8 +131,9 @@ impl Default for Data {
     }
 }
 
+// TODO: Implement proper deserialization that doesn't include all the lookup data
 #[derive(Default, Serialize, Deserialize)]
-struct IdVec<T> {
+pub struct IdVec<T> {
     array: Vec<T>,
     reverse_lookup: Vec<usize>,
 
@@ -193,6 +179,14 @@ impl<T> IdVec<T> {
 
     pub fn len(&self) -> usize {
         self.array.len()
+    }
+
+    pub fn get(&self, id: usize) -> &T {
+        &self.array[id]
+    }
+
+    pub fn get_mut(&mut self, id: usize) -> &mut T {
+        &mut self.array[id]
     }
 }
 

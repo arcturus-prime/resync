@@ -1,7 +1,9 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
+    fs::{File, OpenOptions},
+    io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4},
-    path::PathBuf,
+    path::{Path, PathBuf},
     str::FromStr,
 };
 
@@ -10,7 +12,7 @@ use rfd::FileDialog;
 
 use crate::{
     ir::{Database, DatabaseError},
-    net::{Client, Message, Object},
+    net::{self, Client, Message, Object},
 };
 
 #[derive(Default)]
@@ -106,22 +108,86 @@ impl OpenProjectMenu {
     }
 }
 
+struct Database {
+    objects: Vec<Object>,
+    names: Vec<String>,
+
+    lookup: HashMap<String, usize>,
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        Self {
+            objects: Vec::new(),
+            names: vec![],
+            lookup: HashMap::new(),
+        }
+    }
+}
+
+impl Database {
+    pub fn open(path: &Path) -> Result<Self, DatabaseError> {
+        let mut project_file = File::open(&path)?;
+        let mut project_data = Vec::<u8>::new();
+
+        project_file.read_to_end(&mut project_data)?;
+        let objects: HashMap<String, Object> = serde_json::from_slice(project_data.as_slice())?;
+        let lookup = HashMap::new();
+
+        Ok(Database { objects, lookup })
+    }
+
+    pub fn save(&self, path: &Path) -> Result<(), DatabaseError> {
+        let mut file;
+
+        if !path.exists() {
+            file = File::create(path)?;
+        } else {
+            file = OpenOptions::new().write(true).open(path)?;
+        }
+
+        let data = serde_json::to_vec(&self.objects)?;
+        file.write_all(&data)?;
+
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.objects.len()
+    }
+
+    pub fn name_iter(&self) -> impl Iterator<Item = &String> + '_ {
+        self.objects.iter().map(|obj| &obj.name)
+    }
+
+    pub fn get(&self, name: &str) -> Result<HashMap<String, Object>, DatabaseError> {
+        let mut map = HashMap::new();
+
+        map.insert(name.to_string(), self.objects[name].clone());
+
+        Ok(map)
+    }
+
+    pub fn push(&mut self, objects: HashMap<String, Object>) {
+        self.objects.extend(objects)
+    }
+
+    pub fn delete(&mut self, name: &str) -> Result<(), DatabaseError> {
+        self.objects.remove(name);
+
+        Ok(())
+    }
+}
+
 pub enum ProjectKind {
     Remote(Client),
     Local(PathBuf),
-}
-
-enum Tab {
-    Types,
-    Functions,
-    Globals,
 }
 
 pub struct Project {
     pub name: String,
 
     selected: HashSet<String>,
-    current_tab: Tab,
 
     kind: ProjectKind,
     db: Database,
@@ -145,7 +211,6 @@ impl Project {
         Ok(Self {
             name,
             kind,
-            current_tab: Tab::Types,
             selected: HashSet::new(),
             db: data,
         })
@@ -167,13 +232,7 @@ impl Project {
         let mut data = HashMap::new();
 
         for name in &self.selected {
-            let objects = match self.current_tab {
-                Tab::Types => self.db.types_get_net(name),
-                Tab::Functions => self.db.functions_get_net(name),
-                Tab::Globals => self.db.globals_get_net(name),
-            };
-
-            data.extend(objects);
+            data.extend(self.db.get(&name).unwrap());
         }
 
         data
@@ -182,7 +241,7 @@ impl Project {
     // Adds objects to the project (used for pasting)
     // This will send messages over the socket if the project is of kind `Remote`
     pub fn add_objects(&mut self, data: HashMap<String, Object>) {
-        self.db.push_net(data.clone());
+        self.db.push(data.clone());
 
         if let ProjectKind::Remote(client) = &mut self.kind {
             let result = client.tx.send(Message::Push { objects: data });
@@ -194,29 +253,30 @@ impl Project {
     }
 
     // Delets an object by name from the project
+    // Will send a network message if project is of kind Remote
     pub fn delete_object(&mut self, name: &str) {
-        if let ProjectKind::Remote(_) = &self.kind {
+        if let Err(e) = self.db.delete(name) {
+            log::error!("Could not delete object: {}", e);
             return;
         }
 
-        match self.current_tab {
-            Tab::Types => self.db.types.delete(name),
-            Tab::Functions => self.db.functions.delete(name),
-            Tab::Globals => self.db.data.delete(name),
+        let ProjectKind::Remote(client) = &self.kind else {
+            return;
         };
+
+        if let Err(e) = client.tx.send(Message::Delete {
+            name: name.to_string(),
+        }) {
+            log::error!("Could not queue delete message for network: {}", e);
+        }
     }
 
-    // Render the project UI and handle input
     pub fn render(
         &mut self,
         ui: &mut Ui,
         errors: &mut VecDeque<String>,
         clipboard: &mut HashMap<String, Object>,
     ) {
-        if ui.input(|i| i.modifiers.ctrl && i.key_released(egui::Key::S)) {
-            self.save(errors);
-        }
-
         if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_)))) {
             self.add_objects(clipboard.clone())
         }
@@ -237,66 +297,33 @@ impl Project {
             self.selected.clear()
         }
 
-        ui.horizontal(|ui| {
-            if ui.button("Types").clicked() {
-                self.current_tab = Tab::Types
-            }
-
-            if ui.button("Functions").clicked() {
-                self.current_tab = Tab::Functions
-            }
-
-            if ui.button("Globals").clicked() {
-                self.current_tab = Tab::Globals
-            }
-        });
-
-        match self.current_tab {
-            Tab::Types => Self::render_main_view(
-                &mut self.selected,
-                ui,
-                self.db.types.len(),
-                self.db.types.iter().map(|t| &t.name),
-            ),
-            Tab::Functions => Self::render_main_view(
-                &mut self.selected,
-                ui,
-                self.db.functions.len(),
-                self.db.functions.iter().map(|f| &f.name()),
-            ),
-            Tab::Globals => Self::render_main_view(
-                &mut self.selected,
-                ui,
-                self.db.data.len(),
-                self.db.data.iter().map(|d| &d.name),
-            ),
-        };
-    }
-
-    fn render_main_view<'a, I: Iterator<Item = &'a String>>(
-        selected: &mut HashSet<String>,
-        ui: &mut Ui,
-        len: usize,
-        iter: I,
-    ) {
-        let text_style = ui.text_style_height(&egui::TextStyle::Body);
-
         ui.columns(2, |ui| {
-            egui::ScrollArea::vertical().show_rows(&mut ui[0], text_style, len, |ui, row_range| {
-                let names = iter.skip(row_range.start).take(row_range.count());
+            let text_style = ui[0].text_style_height(&egui::TextStyle::Body);
 
-                for name in names {
-                    let is_selected = selected.contains(name);
-                    let label = ui.selectable_label(is_selected, name);
+            egui::ScrollArea::vertical().show_rows(
+                &mut ui[0],
+                text_style,
+                self.db.len(),
+                |ui, row_range| {
+                    let names = self
+                        .db
+                        .name_iter()
+                        .skip(row_range.start)
+                        .take(row_range.count());
 
-                    if label.clicked() && is_selected {
-                        selected.remove(name);
-                    } else if label.clicked() && !is_selected {
-                        selected.insert(name.clone());
+                    for name in names {
+                        let selected = self.selected.contains(name);
+                        let label = ui.selectable_label(selected, name);
+
+                        if label.clicked() && selected {
+                            self.selected.remove(name);
+                        } else if label.clicked() && !selected {
+                            self.selected.insert(name.clone());
+                        }
                     }
-                }
-            });
-        })
+                },
+            );
+        });
     }
 
     // Handle incoming network messages
@@ -311,7 +338,7 @@ impl Project {
             };
 
             match message {
-                Message::Push { objects } => self.db.push_net(objects),
+                Message::Push { objects } => self.db.push(objects),
             }
         }
     }
